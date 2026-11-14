@@ -9,12 +9,12 @@
     "run_worker_first": ["/api/*"],
     "not_found_handling": "single-page-application"
   },
-  // Leaderboard. Replace database_id with the id printed by: npx wrangler d1 create satit-orbital
+  // Leaderboard (D1). For your own copy, create a database with: npx wrangler d1 create satit-orbital, and put its id here.
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "satit-orbital",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "b633f4c4-c4e2-464b-bbf4-22fccb6d4d50",
       "migrations_dir": "migrations"
     }
   ],

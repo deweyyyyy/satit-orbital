@@ -4,6 +4,10 @@
 
 A browser game for the 2026 NASA Space Apps Challenge (*Space Mission Design Game*, Games · Beginner/Youth → Intermediate). Players pick a mission, build a spacecraft, choose an orbit and rocket, pick ground stations, fly the mission through emergencies in a real-time 3D view, and get a debrief that explains *why* it succeeded or failed. Play solo with an AI crew, with 2–4 players on one device, or online with up to 4 crew on separate devices.
 
+### ▶ [Play SATIT Orbital now](https://satit-orbital.deweytng.workers.dev)
+
+**Live game:** https://satit-orbital.deweytng.workers.dev · **30-second demo:** _coming soon_
+
 By **Team SATIT Orbital**. Sources, credits and SI-use disclosure are [at the end of this page](#sources-and-credits).
 
 ![Title screen with a 3D Earth](docs/screenshots/title.jpg)
@@ -58,7 +62,7 @@ GitHub Actions runs all three on every push and pull request (`.github/workflows
 
 ## Deploy to Cloudflare
 
-From your machine:
+The live version runs at https://satit-orbital.deweytng.workers.dev. To deploy your own copy from your machine:
 
 ```bash
 npx wrangler login
