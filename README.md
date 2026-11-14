@@ -117,9 +117,11 @@ NASA does not endorse this project. It is an independent entry to the 2026 NASA 
 | Visualize a Space Mission Using Virtual Reality (Space Apps 2023) | Mission concept → trajectory → timeline structure. |
 | CSA Digital Games and Activities (partner resource) | General design reference; no content reused. |
 
+CubeSat size and mass limits follow the [CubeSat Design Specification Rev. 14.1](https://www.nasa.gov/wp-content/uploads/2018/01/cubesatdesignspecificationrev14_12022-02-09.pdf) (Cal Poly, hosted by NASA): 1U up to 2 kg, 3U up to 6 kg, 6U up to 12 kg.
+
 Real missions mentioned in the game as references: Landsat 8 and 9, MODIS (Terra and Aqua), GOES, CubeSat Launch Initiative, CAPSTONE, NEAR Shoemaker, OSIRIS-REx, Mars Reconnaissance Orbiter (MARCI), Kepler/K2, the International Space Station and the Deep Space Network.
 
-**Simplified for play:** part masses, power, costs, data rates, budgets, rocket capacities, signal multipliers, scores and emergency odds are game-balance values, not NASA data. The relationships between them are meant to be realistic.
+**Simplified for play:** part masses, power, costs, data rates, budgets, rocket capacities, signal multipliers, revisit times, scores and emergency odds are game-balance values, not NASA data. Mission budgets are scaled down for play (real Mars orbiters cost far more). The relationships between them are meant to be realistic.
 
 ### Software and assets
 

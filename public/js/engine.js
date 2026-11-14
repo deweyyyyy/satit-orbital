@@ -209,7 +209,7 @@ export function checkReq(r, ctx, phase, sim) {
     case 'dailyPhoto': {
       if (!hasTag(picked, 'photo')) return res(false, 'Needs a camera');
       if (orbitPend) return pend('Camera ready · orbit chosen in Phase 3');
-      return res(orbit.revisitH <= 24, `Passes overhead every ${fmtNum(orbit.revisitH)} h`);
+      return res(orbit.revisitH <= (r.hours ?? 24), `Passes over your region about every ${fmtNum(orbit.revisitH)} h`);
     }
     case 'data80': {
       if (sim) {
@@ -244,7 +244,7 @@ export function checkReq(r, ctx, phase, sim) {
       if (!fine) return res(false, 'Thermal imager needs reaction wheels');
       if (sim && sim.flags.limp) return res(false, 'Pointing failed during the mission');
       if (orbitPend) return pend('Thermal imager ready · orbit chosen in Phase 3');
-      return res(orbit.sharp, orbit.sharp ? 'Sharp enough from this orbit' : 'Too far away to see small fires');
+      return res(orbit.sharp, orbit.sharp ? 'Sharp enough from this orbit' : 'Too far away to pick out 50 m fires');
     }
     case 'coverage':
       if (orbitPend) return pend('Decided by your orbit in Phase 3');

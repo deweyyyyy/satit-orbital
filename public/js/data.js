@@ -84,8 +84,8 @@ export const CATALOG = {
   cube: {
     slots: ['bus', 'solar', 'battery', 'comms', 'cpu', 'adcs'],
     bus: [
-      { id: 'u1', code: '1U', tier: 0, name: '1U CubeSat', note: '10 cm cube. Max 1.33 kg total.', mass: 0.2, cost: 0.02, life: 1, storage: 2, maxMass: 1.33, rideCost: 0.05 },
-      { id: 'u3', code: '3U', tier: 1, name: '3U CubeSat', note: 'Three cubes long. Max 4 kg total.', mass: 0.5, cost: 0.05, life: 2, storage: 8, maxMass: 4, rideCost: 0.15 },
+      { id: 'u1', code: '1U', tier: 0, name: '1U CubeSat', note: '10 cm cube. Max 2 kg total.', mass: 0.2, cost: 0.02, life: 1, storage: 2, maxMass: 2, rideCost: 0.05 },
+      { id: 'u3', code: '3U', tier: 1, name: '3U CubeSat', note: 'Three cubes long. Max 6 kg total.', mass: 0.5, cost: 0.05, life: 2, storage: 8, maxMass: 6, rideCost: 0.15 },
       { id: 'u6', code: '6U', tier: 2, name: '6U CubeSat', note: 'Shoebox size. Max 12 kg total.', mass: 1.0, cost: 0.1, life: 3, storage: 16, maxMass: 12, rideCost: 0.3 }
     ],
     solar: [
@@ -140,9 +140,9 @@ export const INSTRUMENTS = {
 
 // Orbits follow the families GMAT can model: LEO, geostationary, lunar, libration-point, interplanetary.
 export const ORBITS = {
-  sso: { name: 'Sun-synchronous orbit', family: 'Low Earth orbit', alt: '550 km', dest: 'leo', revisitH: 12, lifeCap: 10, dv: 60, link: 1, sciMult: 1, sharp: true, explain: 'Passes over every place at the same local time each day, so lighting stays consistent. Covers the whole globe.' },
-  iss: { name: 'ISS-like orbit', family: 'Low Earth orbit', alt: '420 km · 51.6° tilt', dest: 'leo', revisitH: 24, lifeCap: 2, dv: 40, link: 1, sciMult: 0.8, sharp: true, explain: 'Low and easy to reach, but air drag drags you down within a couple of years, and you never fly over the far north or south.' },
-  geo: { name: 'Geostationary orbit', family: 'Geostationary', alt: '35,786 km', dest: 'gto', revisitH: 0.25, lifeCap: 15, dv: 1500, link: 0.5, sciMult: 0.7, sharp: false, explain: 'Hovers over one spot and watches half the planet nonstop, but it is so far away that small fires are invisible.' },
+  sso: { name: 'Sun-synchronous orbit', family: 'Low Earth orbit', alt: '550 km', dest: 'leo', revisitH: 24, lifeCap: 10, dv: 60, link: 1, sciMult: 1, sharp: true, explain: 'Passes over each place at the same local time every day, so lighting stays consistent. With a wide-swath camera it sees nearly the whole globe about once a day.' },
+  iss: { name: 'ISS-like orbit', family: 'Low Earth orbit', alt: '420 km · 51.6° tilt', dest: 'leo', revisitH: 48, lifeCap: 2, dv: 40, link: 1, sciMult: 0.8, sharp: true, explain: 'Low and easy to reach, but air drag drags you down within a couple of years, and you never fly over the far north or south.' },
+  geo: { name: 'Geostationary orbit', family: 'Geostationary', alt: '35,786 km', dest: 'gto', revisitH: 0.25, lifeCap: 15, dv: 1500, link: 0.5, sciMult: 0.7, sharp: false, explain: 'Hovers over one spot and watches nearly half the planet nonstop, but it is so far away that small fires are hard to pick out.' },
 
   nrho: { name: 'Near-rectilinear halo orbit', family: 'Libration-point (halo)', alt: '3,000–70,000 km', dest: 'tli', coverage: 0.92, lifeCap: 20, dv: 450, link: 0.5, sciMult: 1, explain: 'A stretched loop over the Moon’s pole. Sees the south pole and far side most of the time and always sees Earth.' },
   llo: { name: 'Low lunar orbit', family: 'Lunar orbit', alt: '100 km', dest: 'tli', coverage: 0.3, lifeCap: 3, dv: 900, link: 0.5, sciMult: 1.2, explain: 'Close to the surface, great for cameras, but the landing zone is only in view for short passes, and lumpy lunar gravity shortens the orbit’s life.' },
@@ -154,8 +154,8 @@ export const ORBITS = {
   mlow: { name: 'Low Mars orbit', family: 'Interplanetary → Mars orbit', alt: '300 km · polar', dest: 'mars', lifeCap: 15, dv: 1500, link: 0.1, sciMult: 1.0, globalMap: true, explain: 'Low polar orbit that sees the whole planet every day at the same local time, the classic weather-satellite orbit.' },
   mell: { name: 'High elliptical Mars orbit', family: 'Interplanetary → Mars orbit', alt: '300–33,000 km', dest: 'mars', lifeCap: 15, dv: 900, link: 0.1, sciMult: 0.75, globalMap: true, explain: 'Swings far out for whole-disk views. Easier to reach, but pictures are less sharp.' },
 
-  issd: { name: 'Deployed from the ISS', family: 'Low Earth orbit', alt: '~410 km', dest: 'leo', revisitH: 24, lifeCap: 1, dv: 0, link: 1, sciMult: 0.9, explain: 'Astronauts push your CubeSat out from the space station. Easy, but air drag brings it down in about a year.' },
-  cubesso: { name: 'Rideshare to sun-synchronous orbit', family: 'Low Earth orbit', alt: '550 km', dest: 'leo', revisitH: 24, lifeCap: 5, dv: 0, link: 1, sciMult: 1, explain: 'Ride along with a bigger satellite to a higher orbit that lasts for years.' }
+  issd: { name: 'Deployed from the ISS', family: 'Low Earth orbit', alt: '~410 km', dest: 'leo', revisitH: 72, lifeCap: 1, dv: 0, link: 1, sciMult: 0.9, explain: 'Astronauts push your CubeSat out from the space station. Easy, but air drag brings it down in about a year.' },
+  cubesso: { name: 'Rideshare to sun-synchronous orbit', family: 'Low Earth orbit', alt: '550 km', dest: 'leo', revisitH: 48, lifeCap: 5, dv: 0, link: 1, sciMult: 1, explain: 'Ride along with a bigger satellite to a higher orbit that lasts for years.' }
 };
 
 export const LAUNCHERS = {
@@ -185,7 +185,7 @@ export const MISSIONS = [
     defaults: { sel: { bus: 'u3', solar: 'cdep', battery: 'c10', comms: 'cuhf', cpu: 'chob', adcs: 'cmag' }, inst: { cam: true }, orbit: 'issd', launcher: 'csli', ground: 'school' },
     reqs: [
       { kind: 'formFactor', text: 'Fit your CubeSat’s size limit' },
-      { kind: 'dailyPhoto', text: 'Photograph your region at least once a day' },
+      { kind: 'dailyPhoto', text: 'Photograph your region at least every 3 days', hours: 72 },
       { kind: 'data80', text: 'Get at least 80% of pictures to the ground' },
       { kind: 'life', text: 'Operate for at least 6 months' },
       { kind: 'launchTime', text: 'Be in orbit within 12 months', months: 12 },
@@ -201,7 +201,7 @@ export const MISSIONS = [
     instruments: ['tir', 'msi', 'hsi', 'lidar'], orbits: ['sso', 'iss', 'geo'], launchers: ['ride', 'small', 'medium', 'heavy'], grounds: ['uni', 'com'],
     defaults: { sel: { bus: 'm', solar: 'wing', battery: 'b60', comms: 's', cpu: 'basic', adcs: 'rw', prop: 'cold' }, inst: { tir: true, msi: true }, orbit: 'sso', launcher: 'small', ground: 'com' },
     reqs: [
-      { kind: 'revisit', text: 'Revisit fire zones at least every 12 hours', hours: 12 },
+      { kind: 'revisit', text: 'Revisit fire zones at least once a day', hours: 24 },
       { kind: 'fire50', text: 'Detect fires as small as 50 m, day and night' },
       { kind: 'data80', text: 'Deliver at least 80% of collected data' },
       { kind: 'life', text: 'Operate for at least 3 years' },
