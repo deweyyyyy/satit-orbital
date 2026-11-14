@@ -6,11 +6,11 @@ A browser game for the 2026 NASA Space Apps Challenge (*Space Mission Design Gam
 
 ### ▶ [Play SATIT Orbital now](https://satit-orbital.deweytng.workers.dev)
 
-**Live game:** https://satit-orbital.deweytng.workers.dev · **30-second demo:** _coming soon_
+**Live game:** https://satit-orbital.deweytng.workers.dev · **30-second demo:** https://youtu.be/FrKmwO81C5I
+
+[![Watch the 30-second demo on YouTube](docs/youtube-thumbnail.png)](https://youtu.be/FrKmwO81C5I)
 
 By **Team SATIT Orbital**. Sources, credits and SI-use disclosure are [at the end of this page](#sources-and-credits).
-
-![Title screen with a 3D Earth](docs/screenshots/title.jpg)
 
 ## How it plays
 
