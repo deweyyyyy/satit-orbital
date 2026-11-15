@@ -1,10 +1,11 @@
 // Engine tests. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MISSIONS, LEVELS, EVENTS } from '../public/js/data.js';
+import { MISSIONS, LEVELS, EVENTS, ORBITS, INSTRUMENTS, REF_SWATH_KM } from '../public/js/data.js';
 import {
   defaultConfig, normalizeConfig, evaluate, createSim, stepDay, decide, runMission,
-  scoreMission, suggestions, encodeDesign, decodeDesign, firstOption, fmtMoney, fmtData
+  scoreMission, suggestions, encodeDesign, decodeDesign, firstOption, fmtMoney, fmtData,
+  revisitHours, orbitsPerDay, orbitPeriodMin
 } from '../public/js/engine.js';
 
 const fireGood = () => {
@@ -144,4 +145,77 @@ test('challenge seeds are shared and level-specific', async () => {
   assert.ok(CODE_RE.test('AB2CD'));
   assert.ok(!CODE_RE.test('ABC'));
   assert.ok(!CODE_RE.test('ABCD0'));
+});
+
+// ---------- orbit maths ----------
+test('revisit model hits the Landsat-like and MODIS-like sanity targets', () => {
+  const landsatD = revisitHours(705, 185) / 24;
+  const modisD = revisitHours(705, 2330) / 24;
+  assert.ok(landsatD > 13 && landsatD < 17, `Landsat-like ${landsatD} d`);
+  assert.ok(modisD > 1.0 && modisD < 1.4, `MODIS-like ${modisD} d`);
+  const period = orbitPeriodMin(705);
+  assert.ok(period > 98 && period < 100, `period ${period} min`);
+});
+
+test('revisit: wider swath is faster, lower orbit flies more laps and is faster', () => {
+  assert.ok(revisitHours(550, 1000) < revisitHours(550, 500));
+  assert.ok(revisitHours(550, 500) < revisitHours(550, 250));
+  assert.ok(orbitsPerDay(400) > orbitsPerDay(800));
+  assert.ok(revisitHours(400, 500) < revisitHours(800, 500));
+  assert.equal(revisitHours(550, 1e9), 6, 'clamped to 0.25 d');
+  assert.equal(revisitHours(550, 1), 720, 'clamped to 30 d');
+});
+
+test('orbit cards keep a nominal revisit; only LEO orbits have altitude and inclination', () => {
+  for (const o of Object.values(ORBITS)) {
+    if (o.dest === 'leo') {
+      assert.ok(o.altKm > 200 && o.altKm < 2000 && Number.isFinite(o.incDeg));
+      assert.equal(o.revisitH, revisitHours(o.altKm, REF_SWATH_KM));
+    }
+  }
+  assert.equal(ORBITS.geo.revisitH, 0.25);
+  assert.equal(ORBITS.nrho.revisitH, undefined);
+});
+
+test('imaging instruments carry swaths, sharper cameras are narrower', () => {
+  for (const id of ['tir', 'msi', 'hsi', 'navcam', 'wxcam', 'hires', 'cam', 'hdcam']) assert.ok(INSTRUMENTS[id].swathKm > 0, id);
+  assert.ok(INSTRUMENTS.hdcam.swathKm < INSTRUMENTS.cam.swathKm);
+  assert.ok(INSTRUMENTS.hsi.swathKm < INSTRUMENTS.msi.swathKm && INSTRUMENTS.msi.swathKm < INSTRUMENTS.tir.swathKm);
+});
+
+test('ev.revisitH follows the widest imaging swath and gates the requirements', () => {
+  const c = fireGood();
+  const wide = evaluate(c, 'launch');
+  assert.equal(wide.swathKm, INSTRUMENTS.tir.swathKm);
+  assert.equal(wide.revisitH, revisitHours(ORBITS.sso.altKm, INSTRUMENTS.tir.swathKm));
+  const rev = wide.objectives.find((o) => o.kind === 'revisit');
+  assert.equal(rev.status, 'met');
+  assert.match(rev.sub, /^Revisits about every [\d.]+ h with a 3,000 km swath$/);
+  // drop the wide thermal imager: narrow imagers revisit too slowly for a daily fire watch
+  const narrow = { ...c, design: { ...c.design, inst: { msi: true, hsi: true } } };
+  const ev = evaluate(narrow, 'launch');
+  assert.equal(ev.swathKm, INSTRUMENTS.msi.swathKm);
+  assert.ok(ev.revisitH > 24);
+  assert.equal(ev.objectives.find((o) => o.kind === 'revisit').status, 'fail');
+  // geostationary stares: fixed value, no swath
+  const geo = evaluate({ ...c, orbitId: 'geo' }, 'launch');
+  assert.equal(geo.revisitH, 0.25);
+  assert.equal(geo.swathKm, null);
+});
+
+test('CubeSat photo requirement needs a wide camera; the HD camera alone is too narrow', () => {
+  const base = defaultConfig('cube', 'eng');
+  const wide = evaluate(base, 'launch');
+  assert.equal(wide.objectives.find((o) => o.kind === 'dailyPhoto').status, 'met');
+  const hd = evaluate({ ...base, design: { ...base.design, inst: { hdcam: true } } }, 'launch');
+  assert.equal(hd.objectives.find((o) => o.kind === 'dailyPhoto').status, 'fail');
+  assert.ok(wide.revisitH < 72 && hd.revisitH > 72);
+});
+
+test('revisit evaluation is deterministic and the final score uses the same value', () => {
+  const c = fireGood();
+  assert.deepEqual(evaluate(c, 'launch').objectives, evaluate(c, 'launch').objectives);
+  const s = scoreMission(c, runMission(c, 5));
+  const rev = s.objectives.find((o) => o.kind === 'revisit');
+  assert.equal(rev.sub, evaluate(c, 'launch').objectives.find((o) => o.kind === 'revisit').sub);
 });

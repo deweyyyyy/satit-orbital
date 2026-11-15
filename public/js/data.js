@@ -113,9 +113,9 @@ export const CATALOG = {
 };
 
 export const INSTRUMENTS = {
-  tir: { code: 'TIR', tier: 1, color: '#FF8A3D', name: 'Thermal imager', note: 'Sees heat. Spots fires day and night.', mass: 35, power: 80, cost: 18, data: 60, sci: 30, fine: true, tags: ['thermal'] },
-  msi: { code: 'MSI', tier: 1, color: '#3DF5FF', name: 'Multispectral camera', note: 'Maps burn scars and healthy plants.', mass: 25, power: 45, cost: 12, data: 120, sci: 25 },
-  hsi: { code: 'HSI', tier: 2, color: '#B69CFF', name: 'Hyperspectral imager', note: 'Hundreds of colors. Tells what is burning.', mass: 60, power: 140, cost: 30, data: 400, sci: 40, fine: true },
+  tir: { code: 'TIR', tier: 1, color: '#FF8A3D', name: 'Thermal imager', note: 'Sees heat. Spots fires day and night.', mass: 35, power: 80, cost: 18, data: 60, sci: 30, fine: true, swathKm: 3000, tags: ['thermal'] },
+  msi: { code: 'MSI', tier: 1, color: '#3DF5FF', name: 'Multispectral camera', note: 'Maps burn scars and healthy plants.', mass: 25, power: 45, cost: 12, data: 120, sci: 25, swathKm: 290 },
+  hsi: { code: 'HSI', tier: 2, color: '#B69CFF', name: 'Hyperspectral imager', note: 'Hundreds of colors. Tells what is burning.', mass: 60, power: 140, cost: 30, data: 400, sci: 40, fine: true, swathKm: 30 },
   lidar: { code: 'LDR', tier: 2, color: '#5DF2B0', name: 'Smoke lidar', note: 'A laser that measures smoke height.', mass: 80, power: 220, cost: 40, data: 15, sci: 35 },
 
   uhfprox: { code: 'UPX', tier: 0, color: '#5DF2B0', name: 'UHF relay radio', note: 'Talks to rovers at 8 Mb/s.', mass: 6, power: 20, cost: 4, data: 60, sci: 15, rate: 8, tags: ['relay'] },
@@ -123,25 +123,44 @@ export const INSTRUMENTS = {
   kaprox: { code: 'KPX', tier: 2, color: '#FFC23D', name: 'Ka-band relay radio', note: 'Talks to rovers at 100 Mb/s.', mass: 35, power: 150, cost: 30, data: 600, sci: 50, rate: 100, tags: ['relay'] },
   lunacam: { code: 'CAM', tier: 1, color: '#B69CFF', name: 'Lunar mapping camera', note: 'Bonus science between relay passes.', mass: 20, power: 30, cost: 10, data: 80, sci: 20, fine: true },
 
-  navcam: { code: 'NAC', tier: 1, color: '#3DF5FF', name: 'Narrow-angle camera', note: 'Zoom lens for close-up surface images.', mass: 20, power: 20, cost: 12, data: 20, sci: 30, fine: true, tags: ['imager'] },
+  navcam: { code: 'NAC', tier: 1, color: '#3DF5FF', name: 'Narrow-angle camera', note: 'Zoom lens for close-up surface images.', mass: 20, power: 20, cost: 12, data: 20, sci: 30, fine: true, swathKm: 15, tags: ['imager'] },
   irspec: { code: 'IRS', tier: 1, color: '#FF8A3D', name: 'Infrared spectrometer', note: 'Reads what minerals the surface is made of.', mass: 30, power: 25, cost: 18, data: 15, sci: 30 },
   lalt: { code: 'LA', tier: 1, color: '#5DF2B0', name: 'Laser altimeter', note: 'Bounces lasers to measure the exact shape.', mass: 15, power: 40, cost: 10, data: 3, sci: 25 },
   xrs: { code: 'XRS', tier: 2, color: '#B69CFF', name: 'X-ray spectrometer', note: 'Finds chemical elements from X-ray glow.', mass: 25, power: 20, cost: 15, data: 2, sci: 20 },
 
-  wxcam: { code: 'WX', tier: 1, color: '#FFC23D', name: 'Wide-angle weather camera', note: 'Photographs the whole planet’s clouds and dust each day.', mass: 10, power: 15, cost: 8, data: 5, sci: 30, tags: ['globalmap'] },
+  wxcam: { code: 'WX', tier: 1, color: '#FFC23D', name: 'Wide-angle weather camera', note: 'Photographs the whole planet’s clouds and dust each day.', mass: 10, power: 15, cost: 8, data: 5, sci: 30, swathKm: 3000, tags: ['globalmap'] },
   sounder: { code: 'IRS', tier: 1, color: '#FF8A3D', name: 'Atmospheric sounder', note: 'Measures temperature at every height.', mass: 40, power: 35, cost: 25, data: 2, sci: 35 },
-  hires: { code: 'HR', tier: 2, color: '#3DF5FF', name: 'High-resolution camera', note: 'Sees things the size of a car. Huge data.', mass: 65, power: 60, cost: 40, data: 300, sci: 30, fine: true },
+  hires: { code: 'HR', tier: 2, color: '#3DF5FF', name: 'High-resolution camera', note: 'Sees things the size of a car. Huge data.', mass: 65, power: 60, cost: 40, data: 300, sci: 30, fine: true, swathKm: 6 },
   radar: { code: 'RAD', tier: 2, color: '#5DF2B0', name: 'Subsurface radar', note: 'Looks for buried ice.', mass: 50, power: 80, cost: 30, data: 40, sci: 25 },
 
-  cam: { code: 'CAM', tier: 0, color: '#3DF5FF', name: 'CubeSat camera', note: 'Snaps photos of your region.', mass: 0.2, power: 2, cost: 0.02, data: 0.05, sci: 20, tags: ['photo'] },
-  hdcam: { code: 'HD', tier: 1, color: '#B69CFF', name: 'HD camera', note: 'Sharper photos. Needs steady pointing.', mass: 0.5, power: 4, cost: 0.08, data: 0.4, sci: 35, fine: true, tags: ['photo'] },
+  cam: { code: 'CAM', tier: 0, color: '#3DF5FF', name: 'CubeSat camera', note: 'Snaps photos of your region.', mass: 0.2, power: 2, cost: 0.02, data: 0.05, sci: 20, swathKm: 1000, tags: ['photo'] },
+  hdcam: { code: 'HD', tier: 1, color: '#B69CFF', name: 'HD camera', note: 'Sharper photos. Needs steady pointing.', mass: 0.5, power: 4, cost: 0.08, data: 0.4, sci: 35, fine: true, swathKm: 250, tags: ['photo'] },
   radsens: { code: 'RS', tier: 0, color: '#5DF2B0', name: 'Radiation sensor', note: 'Counts space radiation hitting your satellite.', mass: 0.15, power: 1, cost: 0.01, data: 0.002, sci: 15 }
 };
 
+// ---------- simplified orbit maths (Low Earth orbit only) ----------
+// How often one satellite sees the same place depends on how many laps it flies per day and
+// how wide a strip of ground its camera sees (the swath). Wider swath or lower orbit = quicker revisit.
+export const EARTH = { radiusKm: 6371, muKm3s2: 398600.4418, circumferenceKm: 40075 };
+export const REVISIT_LIMITS_D = { min: 0.25, max: 30 };
+export const REF_SWATH_KM = 2330; // MODIS-like; used for the nominal value shown on orbit cards
+
+export function orbitPeriodMin(altKm) {
+  const a = EARTH.radiusKm + altKm;
+  return (2 * Math.PI * Math.sqrt((a * a * a) / EARTH.muKm3s2)) / 60;
+}
+export function orbitsPerDay(altKm) { return 1440 / orbitPeriodMin(altKm); }
+// Hours between looks at the same spot for one satellite. Clamped to 6 h .. 30 days.
+export function revisitHours(altKm, swathKm) {
+  const sw = Math.max(1, Number(swathKm) || 1);
+  const days = EARTH.circumferenceKm / (sw * orbitsPerDay(altKm));
+  return 24 * Math.min(REVISIT_LIMITS_D.max, Math.max(REVISIT_LIMITS_D.min, days));
+}
+
 // Orbits follow the families GMAT can model: LEO, geostationary, lunar, libration-point, interplanetary.
 export const ORBITS = {
-  sso: { name: 'Sun-synchronous orbit', family: 'Low Earth orbit', alt: '550 km', dest: 'leo', revisitH: 24, lifeCap: 10, dv: 60, link: 1, sciMult: 1, sharp: true, explain: 'Passes over each place at the same local time every day, so lighting stays consistent. With a wide-swath camera it sees nearly the whole globe about once a day.' },
-  iss: { name: 'ISS-like orbit', family: 'Low Earth orbit', alt: '420 km · 51.6° tilt', dest: 'leo', revisitH: 48, lifeCap: 2, dv: 40, link: 1, sciMult: 0.8, sharp: true, explain: 'Low and easy to reach, but air drag drags you down within a couple of years, and you never fly over the far north or south.' },
+  sso: { name: 'Sun-synchronous orbit', family: 'Low Earth orbit', alt: '550 km', altKm: 550, incDeg: 97.6, dest: 'leo', lifeCap: 10, dv: 60, link: 1, sciMult: 1, sharp: true, explain: 'Passes over each place at the same local time every day, so lighting stays consistent. With a wide-swath camera it sees nearly the whole globe about once a day.' },
+  iss: { name: 'ISS-like orbit', family: 'Low Earth orbit', alt: '420 km · 51.6° tilt', altKm: 420, incDeg: 51.6, dest: 'leo', lifeCap: 2, dv: 40, link: 1, sciMult: 0.8, sharp: true, explain: 'Low and easy to reach, but air drag drags you down within a couple of years, and you never fly over the far north or south.' },
   geo: { name: 'Geostationary orbit', family: 'Geostationary', alt: '35,786 km', dest: 'gto', revisitH: 0.25, lifeCap: 15, dv: 1500, link: 0.5, sciMult: 0.7, sharp: false, explain: 'Hovers over one spot and watches nearly half the planet nonstop, but it is so far away that small fires are hard to pick out.' },
 
   nrho: { name: 'Near-rectilinear halo orbit', family: 'Libration-point (halo)', alt: '3,000–70,000 km', dest: 'tli', coverage: 0.92, lifeCap: 20, dv: 450, link: 0.5, sciMult: 1, explain: 'A stretched loop over the Moon’s pole. Sees the south pole and far side most of the time and always sees Earth.' },
@@ -154,9 +173,13 @@ export const ORBITS = {
   mlow: { name: 'Low Mars orbit', family: 'Interplanetary → Mars orbit', alt: '300 km · polar', dest: 'mars', lifeCap: 15, dv: 1500, link: 0.1, sciMult: 1.0, globalMap: true, explain: 'Low polar orbit that sees the whole planet every day at the same local time, the classic weather-satellite orbit.' },
   mell: { name: 'High elliptical Mars orbit', family: 'Interplanetary → Mars orbit', alt: '300–33,000 km', dest: 'mars', lifeCap: 15, dv: 900, link: 0.1, sciMult: 0.75, globalMap: true, explain: 'Swings far out for whole-disk views. Easier to reach, but pictures are less sharp.' },
 
-  issd: { name: 'Deployed from the ISS', family: 'Low Earth orbit', alt: '~410 km', dest: 'leo', revisitH: 72, lifeCap: 1, dv: 0, link: 1, sciMult: 0.9, explain: 'Astronauts push your CubeSat out from the space station. Easy, but air drag brings it down in about a year.' },
-  cubesso: { name: 'Rideshare to sun-synchronous orbit', family: 'Low Earth orbit', alt: '550 km', dest: 'leo', revisitH: 48, lifeCap: 5, dv: 0, link: 1, sciMult: 1, explain: 'Ride along with a bigger satellite to a higher orbit that lasts for years.' }
+  issd: { name: 'Deployed from the ISS', family: 'Low Earth orbit', alt: '~410 km', altKm: 410, incDeg: 51.6, dest: 'leo', lifeCap: 1, dv: 0, link: 1, sciMult: 0.9, explain: 'Astronauts push your CubeSat out from the space station. Easy, but air drag brings it down in about a year.' },
+  cubesso: { name: 'Rideshare to sun-synchronous orbit', family: 'Low Earth orbit', alt: '550 km', altKm: 550, incDeg: 97.6, dest: 'leo', lifeCap: 5, dv: 0, link: 1, sciMult: 1, explain: 'Ride along with a bigger satellite to a higher orbit that lasts for years.' }
 };
+
+// Nominal revisit for each LEO orbit, computed once for the reference swath. A real design
+// replaces it with the value for its own widest imaging swath (see evaluate()).
+for (const o of Object.values(ORBITS)) if (o.altKm) o.revisitH = revisitHours(o.altKm, REF_SWATH_KM);
 
 export const LAUNCHERS = {
   ride: { cls: 'std', name: 'Rideshare slot', code: 'RS', cost: 6, cap: { leo: 300 }, orbits: ['sso'], note: 'Share a rocket with other satellites. Cheap, but you go where the main customer goes.' },

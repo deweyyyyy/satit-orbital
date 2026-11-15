@@ -1,7 +1,8 @@
 // SATIT Orbital — game engine. Pure and deterministic: no DOM, no Date, no Math.random.
 // Shared by the browser and the Cloudflare Worker (which re-runs missions to verify leaderboard scores).
 // Code written with assistance from Claude (Anthropic), a Super Intelligence (SI) tool. See README.md.
-import { CATALOG, INSTRUMENTS, ORBITS, LAUNCHERS, GROUNDS, MISSION_BY_ID, LEVELS, EVENTS, OPPORTUNITY_TEXT, ROLES } from './data.js';
+import { CATALOG, INSTRUMENTS, ORBITS, LAUNCHERS, GROUNDS, MISSION_BY_ID, LEVELS, EVENTS, OPPORTUNITY_TEXT, ROLES, revisitHours } from './data.js';
+export { revisitHours, orbitPeriodMin, orbitsPerDay, REF_SWATH_KM } from './data.js';
 
 // ---------- helpers ----------
 export function makeRng(seed) {
@@ -39,6 +40,7 @@ export function fmtMoney(m) {
   if (a >= 1) return neg + '$' + fmtNum(a) + 'M';
   return neg + '$' + Math.round(a * 1000) + 'K';
 }
+export function fmtInt(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 export function fmtMass(kg) {
   if (!Number.isFinite(kg)) return '∞ kg';
   return fmtNum(kg) + ' kg';
@@ -88,6 +90,18 @@ export function normalizeConfig(raw) {
     groundId: pick(m.grounds, r.groundId, base.groundId)
   };
 }
+
+// Revisit time for a design: LEO orbits use the widest swath among the imaging instruments on board.
+// Other orbit families (and designs with no imager) keep the orbit's fixed nominal value.
+export function designRevisit(orbit, picked) {
+  const swaths = picked.map((i) => i.swathKm || 0).filter((v) => v > 0);
+  if (orbit.altKm && swaths.length) {
+    const swathKm = Math.max(...swaths);
+    return { revisitH: revisitHours(orbit.altKm, swathKm), swathKm };
+  }
+  return { revisitH: orbit.revisitH ?? null, swathKm: null };
+}
+const revisitSub = (h, swathKm, lead) => `${lead} about every ${fmtNum(h)} h${swathKm ? ` with a ${fmtInt(swathKm)} km swath` : ''}`;
 
 // ---------- evaluation ----------
 export function evaluate(cfg, phase = 'hangar') {
@@ -142,7 +156,8 @@ export function evaluate(cfg, phase = 'hangar') {
   const sciPredicted = Math.round(sciPerDay * days / 10);
   const sciTarget = Math.round(m.sciRef * days / 10 * 0.7);
 
-  const ctx = { m, cat, eq, picked, orbit, launcher, ground, dest, mass, massLimit, draw, gen, data, down, deliveredFrac, totalCost, budget, life, fine, dvHave, dvNeed };
+  const { revisitH, swathKm } = designRevisit(orbit, picked);
+  const ctx = { m, cat, eq, picked, orbit, launcher, ground, dest, mass, massLimit, draw, gen, data, down, deliveredFrac, totalCost, budget, life, fine, dvHave, dvNeed, revisitH, swathKm };
 
   // ----- issues voiced by crew -----
   const issues = [];
@@ -191,7 +206,7 @@ export function evaluate(cfg, phase = 'hangar') {
     m, cat, eq, picked, instruments, orbit, launcher, ground, dest, lvl, sandbox,
     mass, massLimit, busDraw, instDraw, draw, gen, cap, data, down, deliveredFrac, duty,
     scCost, launchCost, opsCost, opsCostYr, totalCost, budget, life, storage, days,
-    dvHave, dvNeed, fine, sciPotential, sciEff, sciPredicted, sciTarget,
+    dvHave, dvNeed, fine, sciPotential, sciEff, sciPredicted, sciTarget, revisitH, swathKm,
     issues, bad, warns, ready, objectives, stars
   };
 }
@@ -201,6 +216,8 @@ function hasTag(picked, tag) { return picked.some((i) => i.tags && i.tags.includ
 // status: met | fail | pend
 export function checkReq(r, ctx, phase, sim) {
   const { m, eq, picked, orbit, launcher, mass, deliveredFrac, totalCost, budget, life, fine } = ctx;
+  const revisitH = ctx.revisitH ?? orbit.revisitH;
+  const swathKm = ctx.swathKm ?? null;
   const orbitPend = phase === 'hangar';
   const res = (ok, sub) => ({ text: r.text, kind: r.kind, status: ok ? 'met' : 'fail', sub });
   const pend = (sub) => ({ text: r.text, kind: r.kind, status: 'pend', sub });
@@ -209,7 +226,7 @@ export function checkReq(r, ctx, phase, sim) {
     case 'dailyPhoto': {
       if (!hasTag(picked, 'photo')) return res(false, 'Needs a camera');
       if (orbitPend) return pend('Camera ready · orbit chosen in Phase 3');
-      return res(orbit.revisitH <= (r.hours ?? 24), `Passes over your region about every ${fmtNum(orbit.revisitH)} h`);
+      return res(revisitH <= (r.hours ?? 24), revisitSub(revisitH, swathKm, 'Revisits'));
     }
     case 'data80': {
       if (sim) {
@@ -237,7 +254,7 @@ export function checkReq(r, ctx, phase, sim) {
     }
     case 'revisit':
       if (orbitPend) return pend('Decided by your orbit in Phase 3');
-      return res(orbit.revisitH <= r.hours, `Revisits every ${fmtNum(orbit.revisitH)} h`);
+      return res(revisitH <= r.hours, revisitSub(revisitH, swathKm, 'Revisits'));
     case 'fire50': {
       const tir = picked.some((i) => i.id === 'tir');
       if (!tir) return res(false, 'Needs a thermal imager');
@@ -523,7 +540,7 @@ export function runMission(cfg, seed, decisions = []) {
 // ---------- scoring & debrief ----------
 export function scoreMission(cfg, sim) {
   const ev = evaluate(cfg, 'ops');
-  const ctx = { m: ev.m, eq: ev.eq, picked: ev.picked, orbit: ev.orbit, launcher: ev.launcher, mass: ev.mass, deliveredFrac: ev.deliveredFrac, totalCost: ev.totalCost, budget: ev.budget, life: ev.life, fine: ev.fine };
+  const ctx = { m: ev.m, eq: ev.eq, picked: ev.picked, orbit: ev.orbit, launcher: ev.launcher, mass: ev.mass, deliveredFrac: ev.deliveredFrac, totalCost: ev.totalCost, budget: ev.budget, life: ev.life, fine: ev.fine, revisitH: ev.revisitH, swathKm: ev.swathKm };
   const objectives = ev.m.reqs.map((r) => checkReq(r, ctx, 'final', sim));
   const met = objectives.filter((o) => o.status === 'met').length;
   const n = objectives.length;
