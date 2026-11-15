@@ -37,6 +37,15 @@ Every choice has consequences: more instruments mean more mass, power, cost and 
 - **Five modes:** solo with an AI crew, local co-op (2–4 players), online co-op (up to 4, Durable Objects), versus with a shared challenge code, and sandbox.
 - **Learning built in:** every warning explains *why*, every emergency ends with a "why it matters" lesson, and the debrief suggests what would have changed the result.
 - **Accessible:** keyboard playable, screen-reader labels, honours "reduce motion", sound can be muted.
+- **Automatic leaderboard:** when a ranked mission ends, the score is sent by itself (generated callsign only). The server replays the whole mission to verify it.
+- **Daily Challenge:** one shared mission and seed every day (UTC), with its own leaderboard.
+- **Watch top runs:** replay any saved run on the operations screen. Replays of a still-open daily board or a fresh challenge unlock later, so nobody can copy a leader's run.
+- **Classroom mode:** a teacher makes a class code (no names, no accounts), students join and their scores count for the class, with a class table and a printable report.
+- **Spectator mode:** friends can watch an online co-op mission live, read-only.
+- **Guided first mission:** a step-by-step coach that follows the real game flow (on for first-time players, with Skip and Hide).
+- **Thai language:** an EN / ไทย switch for the interface, mission text and crew advice (machine-assisted translation, please report mistakes).
+- **Result card:** save or share a PNG of your result.
+- **Realistic revisit times:** how often a low-Earth-orbit satellite sees the same place is worked out from its altitude and the camera's swath width (a Landsat-like camera takes about 15 days, a MODIS-like one about 1 day), so choosing a camera is a real trade-off.
 
 ## Run locally
 
@@ -55,7 +64,8 @@ The game also works with no backend at all (any static file server pointed at `p
 ```bash
 npm test             # engine unit tests (node:test)
 npm run check        # bundle the Worker without deploying
-npm run test:smoke   # API + Durable Object room test, against a running `npm run dev`
+npm run test:smoke   # API, seeds, daily, replays, classes and room/spectator tests, against a running `npm run dev`
+npm run verify       # compare this checkout with the judged version (provenance.json)
 ```
 
 GitHub Actions runs all three on every push and pull request (`.github/workflows/ci.yml`).
@@ -87,17 +97,36 @@ public/                 static game (no build step)
   js/main.js            state, rendering, transitions, simulation loop, online sync
   js/scene3d.js         Three.js 3D views
   js/net.js             leaderboard + room client
+  js/replay.js          watch saved runs
+  js/classroom.js       classroom overlay and print report
+  js/card.js            result card (PNG)
+  js/tutorial.js        guided first mission
+  js/i18n.js, th.js     Thai language
+  js/provenance.js      "Originally by" badge and copy notice
   js/fx.js              synthesized sound effects
   vendor/               three.module.min.js (Three.js r170, MIT)
 src/worker.js           Cloudflare Worker API + MissionRoom Durable Object
 migrations/             D1 schema
+scripts/provenance.mjs  fingerprints of the judged version (see below)
+provenance.json         SHA-256 of every shipped file in the judged version
 test/                   unit and smoke tests
 docs/screenshots/       images for this README
 ```
 
 - **Verified scores.** The client submits its design, random seed and emergency decisions. The Worker replays the mission with the same `engine.js` and stores the server-computed score in D1. Designs that could never launch are rejected, and Versus challenge runs use a seed derived on the server so every team faces the same emergencies. Known limit: on the open boards the player's browser picks the seed, so a determined player could try many seeds offline.
 - **Online rooms.** One Durable Object per 5-character room code holds the Commander's mission state and relays crew messages over WebSockets (hibernation API). The Commander's browser runs the simulation and streams snapshots; other crew vote on emergencies and own different parts of the spacecraft. Seats can be reclaimed after a dropped connection, and idle rooms clean themselves up after 24 hours.
-- **No personal data.** Leaderboard names are generated callsigns (e.g. `Swift-Falcon-07`); free text is rejected.
+- **No personal data.** Leaderboard names are generated callsigns (e.g. `Swift-Falcon-07`); free text is rejected. Classes are random codes only.
+- **Server-issued seeds.** Ranked open runs ask the server for a one-time random seed, which is spent in the same transaction as the score, so players cannot shop for an easy run. Known limit: the seed limiter is global, so a determined spammer could make ranked play fall back to "offline run" for everyone for a while.
+
+## The version submitted to NASA Space Apps
+
+SATIT Orbital was submitted to the 2026 NASA Space Apps Challenge on **November 14, 2026 at 10:46 PM (UTC+7)**. That exact version is preserved:
+
+```bash
+git checkout v1.0-submitted     # the tag, or: git checkout submitted
+```
+
+`provenance.json` lists a SHA-256 fingerprint for each shipped file in that version. In any copy of this project, run `npm run verify` to see how many files are identical to the submitted version (for example "16 of 17 files, 94%"). The game also shows a small "Originally by SATIT Orbital: github.com/deweyyyyy/satit-orbital" line, and a notice when it is served from a website other than the official ones. This is an open-source project (MIT), so copying is allowed; these are here so the origin stays clear.
 
 ## Sources and credits
 
