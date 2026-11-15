@@ -3,6 +3,8 @@
   "name": "satit-orbital",
   "main": "src/worker.js",
   "compatibility_date": "2026-10-01",
+  // Custom domain (the domain is on the same Cloudflare account). The workers.dev URL keeps working too.
+  "routes": [{ "pattern": "satit-orbital.deweysworld.app", "custom_domain": true }],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

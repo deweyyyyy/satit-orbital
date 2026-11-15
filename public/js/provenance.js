@@ -6,10 +6,11 @@ export const ORIGIN = {
   name: 'SATIT Orbital',
   repo: 'deweyyyyy/satit-orbital',
   repoUrl: 'https://github.com/deweyyyyy/satit-orbital',
-  liveUrl: 'https://satit-orbital.deweytng.workers.dev',
+  liveUrl: 'https://satit-orbital.deweysworld.app',
+  workerUrl: 'https://satit-orbital.deweytng.workers.dev',
   firstPublished: '2026-11-14',
   submittedTag: 'v1.0-submitted',
-  officialHosts: ['satit-orbital.deweytng.workers.dev', 'satit-orbital-next.deweytng.workers.dev']
+  officialHosts: ['satit-orbital.deweysworld.app', 'satit-orbital.deweytng.workers.dev', 'satit-orbital-next.deweytng.workers.dev']
 };
 
 export function isOfficialHost(host = (typeof location !== 'undefined' ? location.hostname : '')) {
