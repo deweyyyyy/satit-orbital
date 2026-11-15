@@ -2,7 +2,8 @@
 // Regions marked data-r are patched independently so animations keep running.
 // Written with assistance from Claude (Anthropic), a Super Intelligence (SI) tool.
 import { ROLES, ROLE_ORDER, LEVELS, CML, MISSIONS, INSTRUMENTS, ORBITS, LAUNCHERS, GROUNDS, SLOT_INFO, SLOT_OWNER } from './data.js';
-import { fmtNum, fmtMoney, fmtMass, fmtData } from './engine.js';
+import { fmtNum, fmtMoney, fmtMass, fmtData, designRevisit, fmtInt } from './engine.js';
+import { originalBadge } from './provenance.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -41,8 +42,11 @@ export const ICON = {
   share: `<svg width="18" height="18" viewBox="0 0 24 24" ${P(2)}><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg>`,
   download: `<svg width="18" height="18" viewBox="0 0 24 24" ${P(2)}><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>`,
   refresh: `<svg width="18" height="18" viewBox="0 0 24 24" ${P(2)}><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg>`,
-  close: `<svg width="20" height="20" viewBox="0 0 24 24" ${P(2.2)}><path d="M6 6l12 12M18 6L6 18"/></svg>`
+  close: `<svg width="20" height="20" viewBox="0 0 24 24" ${P(2.2)}><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+  book: `<svg width="20" height="20" viewBox="0 0 24 24" ${P(2)}><path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4zM20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z"/></svg>`,
+  eye: `<svg width="20" height="20" viewBox="0 0 24 24" ${P(2)}><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>`
 };
+const fmtPts = (n) => String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 const ROLE_ICON = { cmd: ICON.star, eng: ICON.wrench, sci: ICON.flask, ops: ICON.antenna };
 const TIERS = [{ n: 'BASIC', c: '#A5B0D0' }, { n: 'ADVANCED', c: '#3DF5FF' }, { n: 'ELITE', c: '#FFC23D' }];
 export const PHASES = [
@@ -176,7 +180,8 @@ export function titleView(S) {
     <nav aria-label="Main menu" class="col" style="width:400px">
       <button class="btn primary ready" ${act('go', 'select')} style="justify-content:space-between">START MISSION ${ICON.play}</button>
       <button class="btn" ${act('openBoard')} style="justify-content:space-between;min-height:52px">LEADERBOARD ${ICON.trophy}</button>
-      <button class="btn" ${act('openHelp')} style="justify-content:space-between;min-height:52px">HOW TO PLAY ${ICON.help}</button>
+      <button class="btn" ${act('openDaily')} ${S.netOk ? '' : 'disabled title="The daily challenge needs the online version of the game"'} style="justify-content:space-between;min-height:52px">DAILY CHALLENGE ${ICON.star}</button>
+      <div class="row" style="gap:10px"><button class="btn" ${act('openHelp')} style="flex:1;justify-content:space-between;min-height:52px;padding:0 14px">HOW TO PLAY ${ICON.help}</button><button class="btn" ${act('openClass')} style="flex:1;justify-content:space-between;min-height:52px;padding:0 14px">CLASSROOM ${ICON.book}</button></div>
     </nav>
     <div class="row small mut">Callsign <b class="disp" style="color:var(--ink);letter-spacing:.06em">${esc(S.callsign)}</b><button class="btn link" ${act('reroll')}>NEW CALLSIGN</button></div>
   </div>
@@ -191,7 +196,8 @@ export function titleView(S) {
     </ol>
   </section>
   <span class="abs tiny mut" style="left:80px;bottom:40px;max-width:460px;line-height:1.5">By Team SATIT Orbital for the 2026 NASA Space Apps Challenge. Current rank: CML ${S.rank} · ${esc(rank.name)}. NASA does not endorse this game.<br><span style="color:var(--am)">SI-assisted: code, graphics and sound made with Claude (Anthropic).</span></span>
-  <div data-r="corner" class="abs row" style="right:24px;top:24px"><button class="iconbtn" ${act('toggleMute')} aria-label="${S.muted ? 'Turn sound on' : 'Turn sound off'}">${S.muted ? ICON.mute : ICON.sound}</button></div>`;
+  <span class="abs tiny mut" style="left:80px;bottom:14px">${originalBadge()}</span>
+  <div data-r="corner" class="abs row" style="right:24px;top:24px">${S.classCode ? `<span class="chip good classchip" style="font-size:13px;padding:5px 12px">Class <b class="disp" style="letter-spacing:.12em">${esc(S.classCode)}</b></span><button class="btn link" ${act('leaveClass')} aria-label="Leave class ${esc(S.classCode)}">LEAVE</button>` : ''}<button class="iconbtn" ${act('toggleMute')} aria-label="${S.muted ? 'Turn sound on' : 'Turn sound off'}">${S.muted ? ICON.mute : ICON.sound}</button></div>`;
 }
 
 // ---------- SELECT ----------
@@ -252,8 +258,9 @@ function modePanel(S) {
   if (mode === 'sandbox') body = `<p class="small mut" style="margin:0">No budget, no mass limit, fewer emergencies. Try anything and see what breaks. Sandbox scores are not ranked.</p>`;
   if (mode === 'online') {
     const o = S.online;
-    if (o.status === 'in') body = `<div class="row between"><span class="small">Room code</span><b class="disp" style="font-size:22px;letter-spacing:.3em;color:var(--am)">${esc(o.code)}</b></div><p class="tiny mut" style="margin:0">Share the code with up to 3 friends. You are the <b style="color:${ROLES[o.role].color}">${esc(ROLES[o.role].name)}</b>. ${o.role === 'cmd' ? 'You control the countdown.' : 'The Commander controls the countdown.'}</p><button class="btn ghost" ${act('leaveRoom')}>LEAVE ROOM</button>`;
-    else body = `<div class="row"><button class="btn cyan" ${act('createRoom')}>CREATE ROOM</button><input class="input" id="roomInput" maxlength="5" placeholder="CODE" aria-label="Room code" value="${esc(S.roomInput)}" ${act('typeRoom', undefined, 'data-input="1"')}><button class="btn" ${act('joinRoom')}>JOIN</button></div><p class="tiny ${o.error ? '' : 'mut'}" style="margin:0;${o.error ? 'color:var(--pk)' : ''}">${esc(o.error || (o.status === 'connecting' ? 'Connecting…' : 'Play together from different devices. Up to 4 crew per room.'))}</p>`;
+    if (o.status === 'in' && o.role === 'spectator') body = `<div class="row between"><span class="small">Room code</span><b class="disp" style="font-size:22px;letter-spacing:.3em;color:var(--am)">${esc(o.code)}</b></div><p class="tiny mut" style="margin:0">You are watching this room. You cannot change anything: your screen follows the Commander.</p><button class="btn ghost" ${act('leaveRoom')}>STOP WATCHING</button>`;
+    else if (o.status === 'in') body = `<div class="row between"><span class="small">Room code</span><b class="disp" style="font-size:22px;letter-spacing:.3em;color:var(--am)">${esc(o.code)}</b></div><p class="tiny mut" style="margin:0">Share the code with up to 3 friends. You are the <b style="color:${ROLES[o.role].color}">${esc(ROLES[o.role].name)}</b>. ${o.role === 'cmd' ? 'You control the countdown.' : 'The Commander controls the countdown.'}${o.spectators ? ` ${fmtNum(o.spectators)} watching.` : ''}</p><button class="btn ghost" ${act('leaveRoom')}>LEAVE ROOM</button>`;
+    else body = `<div class="row"><button class="btn cyan" ${act('createRoom')}>CREATE ROOM</button><input class="input" id="roomInput" maxlength="5" placeholder="CODE" aria-label="Room code" value="${esc(S.roomInput)}" ${act('typeRoom', undefined, 'data-input="1"')}><button class="btn" ${act('joinRoom')}>JOIN</button></div><div class="row"><input class="input" id="watchInput" maxlength="5" placeholder="CODE" aria-label="Room code to watch" value="${esc(S.watchInput || '')}" ${act('typeWatch', undefined, 'data-input="1"')}><button class="btn" ${act('watchRoom')}>${ICON.eye} WATCH A ROOM</button></div><p class="tiny ${o.error ? '' : 'mut'}" style="margin:0;${o.error ? 'color:var(--pk)' : ''}">${esc(o.error || (o.status === 'connecting' ? 'Connecting…' : 'Play together from different devices (up to 4 crew), or watch a room without joining the crew.'))}</p>`;
   }
   return `<section class="panel" aria-labelledby="crew-h" style="gap:10px"><h2 id="crew-h" class="label">Crew</h2>${crewHTML(S, null)}${body}</section>`;
 }
@@ -281,7 +288,7 @@ export function hangarView(S) {
     <div class="grow scroll col" data-scroll="cards" style="gap:10px;padding-right:2px">${partCards(S, ev, tab)}</div>
   </section>
   <div class="abs col" style="top:84px;left:404px;right:364px;bottom:0;align-items:center">
-    <div data-r="score" class="col" style="margin-top:22px;align-items:center;gap:6px">
+    <div data-r="score" class="col" style="margin-top:30px;align-items:center;gap:6px">
       <span class="kicker" style="letter-spacing:.26em">Predicted science</span>
       <div class="row" style="align-items:baseline;gap:8px"><span class="disp" style="font-size:52px;font-weight:900;line-height:1;color:var(--cy);text-shadow:0 0 22px rgba(61,245,255,.55)">${fmtNum(ev.sciPredicted)}</span><span class="disp mut" style="font-size:18px;font-weight:600">target ${fmtNum(ev.sciTarget)}</span></div>
       ${starsHTML(ev.stars)}
@@ -292,7 +299,7 @@ export function hangarView(S) {
       <div class="float" style="margin-top:-10px">${craftHTML(ev, ev.m.cls === 'cube' ? 1.3 : 1)}</div>
     </div>`}
     <div data-r="nav" class="row" style="margin-bottom:36px;gap:12px">
-      ${guest ? `<span class="btn" aria-disabled="true">COMMANDER CONTROLS THE COUNTDOWN</span>` : `<button class="btn ghost" ${act('go', 'select')}>${ICON.back} BACK</button>
+      ${guest ? `<span class="btn" aria-disabled="true">COMMANDER CONTROLS THE COUNTDOWN</span>` : `<button class="btn ghost" ${act('go', S.daily ? 'title' : 'select')}>${ICON.back} BACK</button>
       <button class="btn primary ${ev.ready ? 'ready' : ''}" ${act('go', 'launch')} ${ev.ready ? '' : 'disabled'}>${ev.ready ? 'NEXT: LAUNCH & ORBIT' : `FIX ${ev.bad.length} PROBLEM${ev.bad.length > 1 ? 'S' : ''}`}</button>`}
     </div>
   </div>
@@ -335,7 +342,8 @@ function chipsFor(on, o, cur) {
 }
 
 function partCards(S, ev, tab) {
-  const editable = S.canEdit(tab);
+  const spectator = S.isSpectator();
+  const editable = S.canEdit(tab) || spectator; // spectators see no SUGGEST badge: they cannot act at all
   if (tab === 'inst') {
     return ev.m.instruments.map((id) => {
       const i = INSTRUMENTS[id];
@@ -344,7 +352,7 @@ function partCards(S, ev, tab) {
       const chips = [`<span class="chip ${on ? '' : 'bad'}">${on ? '' : '+'}${fmtMass(i.mass)}</span>`, `<span class="chip ${on ? '' : 'bad'}">${on ? '' : '+'}${fmtNum(i.power)} W</span>`, `<span class="chip ${on ? '' : 'bad'}">${on ? '' : '+'}${fmtMoney(i.cost)}</span>`, `<span class="chip ${on ? '' : 'amber'}">${on ? '' : '+'}${fmtData(i.data)}/day</span>`, `<span class="chip good">+${i.sci} science</span>`];
       if (i.fine) chips.push('<span class="chip amber">needs precise aim</span>');
       if (i.rate) chips.push(`<span class="chip">${i.rate} Mb/s relay</span>`);
-      return `<button class="card ${on ? 'on' : ''}" ${act('toggleInst', id)} aria-pressed="${on}">
+      return `<button class="card ${on ? 'on' : ''}" ${act('toggleInst', id)} aria-pressed="${on}" ${spectator ? 'disabled' : ''}>
         <span class="ico" style="color:${t.c}">${i.code}</span><span class="grow col" style="gap:4px"><span class="row between"><span class="tier" style="color:${t.c}">${t.n}</span>${on ? '<span class="badge">ON BOARD</span>' : editable ? '' : '<span class="badge amber">SUGGEST</span>'}</span>
         <span class="name">${esc(i.name)}</span><span class="note">${esc(i.note)}</span><span class="chips">${chips.join('')}</span></span></button>`;
     }).join('');
@@ -353,7 +361,7 @@ function partCards(S, ev, tab) {
   return ev.cat[tab].map((o) => {
     const on = o.id === cur.id;
     const t = TIERS[o.tier];
-    return `<button class="card ${on ? 'on' : ''}" ${act('pickPart', `${tab}:${o.id}`)} aria-pressed="${on}">
+    return `<button class="card ${on ? 'on' : ''}" ${act('pickPart', `${tab}:${o.id}`)} aria-pressed="${on}" ${spectator ? 'disabled' : ''}>
       <span class="ico" style="color:${t.c}">${esc(o.code)}</span><span class="grow col" style="gap:4px"><span class="row between"><span class="tier" style="color:${t.c}">${t.n}</span>${on ? '<span class="badge">EQUIPPED</span>' : editable ? '' : '<span class="badge amber">SUGGEST</span>'}</span>
       <span class="name">${esc(o.name)}</span><span class="note">${esc(o.note)}</span><span class="chips">${chipsFor(on, o, cur)}</span></span></button>`;
   }).join('');
@@ -372,7 +380,8 @@ export function launchView(S) {
     const o = ORBITS[id];
     const on = id === S.cfg.orbitId;
     const chips = [];
-    if (o.revisitH !== undefined) chips.push(`<span class="chip">revisit ${fmtNum(o.revisitH)} h</span>`);
+    const rv = designRevisit(o, ev.picked);
+    if (rv.revisitH !== null && rv.revisitH !== undefined) chips.push(`<span class="chip" title="Revisit depends on your camera's swath. A wider swath revisits sooner but sees less detail.">revisit ~${fmtNum(rv.revisitH)} h${rv.swathKm ? ` \u00b7 ${fmtInt(rv.swathKm)} km swath` : ''}</span>`);
     if (o.coverage !== undefined) chips.push(`<span class="chip ${o.coverage >= 0.9 ? 'good' : 'bad'}">coverage ${Math.round(o.coverage * 100)}%</span>`);
     if (o.closestKm !== undefined) chips.push(`<span class="chip">closest ${fmtNum(o.closestKm)} km</span>`);
     if (o.resM !== undefined) chips.push(`<span class="chip">${fmtNum(o.resM)} m/pixel</span>`);
@@ -474,7 +483,7 @@ export function opsView(S, d) {
   ].join('');
   const running = d.status === 'running';
   return `<div class="stars2"></div>
-  <header class="hud" data-r="hud"><div class="col" style="gap:4px;width:230px"><span class="kicker" style="color:var(--gr)">Ground segment · ${esc(ev.ground.name)}</span><h1>${esc(m.name.toUpperCase())}</h1></div><div class="gauges">${hudG}</div>${phaseBlock(3)}</header>
+  <header class="hud" data-r="hud"><div class="col" style="gap:4px;width:230px"><span class="kicker" style="color:var(--gr)">Ground segment · ${esc(ev.ground.name)}</span><h1>${esc(m.name.toUpperCase())}</h1></div><div class="gauges">${hudG}</div>${S.replay ? replayBlock(S) : phaseBlock(3)}</header>
   <section data-r="ops-left" class="panel abs slide-l" style="top:100px;left:24px;bottom:24px;width:340px" aria-labelledby="st-h">
     <h2 id="st-h" class="label">Mission stats</h2>
     <div class="stat"><span>Data collected</span><b>${fmtData(d.generated)}</b></div>
@@ -504,6 +513,11 @@ export function opsView(S, d) {
   ${commonRegions(S)}`;
 }
 
+function replayBlock(S) {
+  const R = S.replay;
+  return `<div class="col" style="align-items:flex-end;gap:6px;flex:none;width:230px"><span class="badge amber" style="font-size:10px;padding:4px 9px;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">REPLAY · ${esc(R.callsign)}</span><button class="btn" ${act('exitReplay')} style="min-height:36px;font-size:10px;letter-spacing:.06em;padding:0 10px;gap:6px">${ICON.back} BACK TO LEADERBOARD</button></div>`;
+}
+
 export function groundOverlay(S) {
   const ev = S.ev;
   const m = ev.m;
@@ -522,11 +536,28 @@ export function groundOverlay(S) {
     <p class="mut" style="margin:0;font-size:15px;line-height:1.45">Ground stations receive your data and send commands. More antennas mean more data delivered, but they cost money every year.</p>
     <div class="row" style="gap:12px;align-items:stretch">${cards}</div>
     <div class="row between"><span class="small">${ev.ready ? `Instruments make ${fmtData(ev.data)}/day · you can send ${fmtData(ev.down)}/day` : `<span style="color:var(--pk)">${esc(ev.bad[0] ? ev.bad[0].t : '')}</span>`}</span>
-      ${guest ? '<span class="btn" aria-disabled="true">WAITING FOR COMMANDER</span>' : `<button class="btn primary ${ev.ready ? 'ready' : ''}" ${act('startMission')} ${ev.ready ? '' : 'disabled'}>START MISSION</button>`}</div>
+      ${guest ? '<span class="btn" aria-disabled="true">WAITING FOR COMMANDER</span>' : `<button class="btn primary ${ev.ready ? 'ready' : ''}" ${act('startMission')} ${ev.ready && !S.starting ? '' : 'disabled'}>${S.starting ? 'CONNECTING…' : 'START MISSION'}</button>`}</div>
+  </div></div>`;
+}
+
+function replayEventOverlay(S, d) {
+  const p = d.pending;
+  const R = S.replay;
+  const owner = ROLES[p.owner];
+  const opts = p.options.map((o) => {
+    const chosen = o.id === R.choice;
+    return `<div class="card ${chosen ? 'on' : ''}" style="cursor:default;flex-direction:column;gap:8px;${o.disabled ? 'opacity:.6' : ''}"><div class="row between" style="width:100%"><span class="name">${esc(o.label)}</span>${chosen ? '<span class="badge">CHOSEN IN THIS RUN</span>' : ''}</div><span class="note">${esc(o.effect)}${o.why ? ` <b style="color:var(--pk)">${esc(o.why)}</b>` : ''}</span></div>`;
+  }).join('');
+  return `<div class="overlay"><div class="modal pink" role="dialog" aria-labelledby="evt-h" style="width:880px">
+    <div class="row between"><span class="kicker" style="color:var(--pk)">Day ${d.day} · emergency · ${esc(owner.name)} leads</span><span class="badge amber">REPLAY</span></div>
+    <h2 id="evt-h">${esc(p.title)}</h2><p style="margin:0;font-size:17px;line-height:1.45">${esc(p.text)}</p>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${opts}</div>
+    <p class="small mut" style="margin:0">${esc(R.callsign)}'s crew is deciding. The replay applies their saved choice in a moment.</p>
   </div></div>`;
 }
 
 export function eventOverlay(S, d) {
+  if (S.replay) return replayEventOverlay(S, d);
   const p = d.pending;
   const owner = ROLES[p.owner];
   const humans = S.humanRoles();
@@ -534,6 +565,7 @@ export function eventOverlay(S, d) {
   const mode = S.cfg.mode;
   const solo = mode === 'solo' || mode === 'versus' || mode === 'sandbox';
   const guest = S.isGuest();
+  const spectator = S.isSpectator();
   const myRole = S.myRole();
   const optHTML = p.options.map((o) => {
     const voters = ROLE_ORDER.filter((r) => votes[r] === o.id);
@@ -541,7 +573,7 @@ export function eventOverlay(S, d) {
     let control = '';
     if (solo) control = `<button class="btn ${o.disabled ? '' : 'cyan'}" ${act('choose', o.id)} ${o.disabled ? 'disabled' : ''}>CHOOSE</button>`;
     else if (mode === 'local') control = `<div class="row" style="gap:6px;flex-wrap:wrap">${humans.map((r) => `<button class="btn ${votes[r] === o.id ? 'cyan' : ''}" ${act('vote', `${r}:${o.id}`)} ${o.disabled ? 'disabled' : ''} style="min-height:40px;padding:0 10px;font-size:11px;color:${ROLES[r].color}">${esc(ROLES[r].name.toUpperCase())}</button>`).join('')}</div>`;
-    else if (mode === 'online') control = `<button class="btn ${votes[myRole] === o.id ? 'cyan' : ''}" ${act('vote', `${myRole}:${o.id}`)} ${o.disabled ? 'disabled' : ''}>VOTE</button>`;
+    else if (mode === 'online' && !spectator) control = `<button class="btn ${votes[myRole] === o.id ? 'cyan' : ''}" ${act('vote', `${myRole}:${o.id}`)} ${o.disabled ? 'disabled' : ''}>VOTE</button>`;
     return `<div class="card" style="cursor:default;flex-direction:column;gap:8px;${o.disabled ? 'opacity:.6' : ''}"><div class="row between" style="width:100%"><span class="name">${esc(o.label)}</span><span class="row" style="gap:4px">${voteChips}</span></div><span class="note">${esc(o.effect)}${o.why ? ` <b style="color:var(--pk)">${esc(o.why)}</b>` : ''}</span>${control}</div>`;
   }).join('');
   const advice = ROLE_ORDER.filter((r) => !humans.includes(r) && votes[r]).map((r) => `${ROLES[r].npc} (${ROLES[r].name}) votes “${esc(p.options.find((o) => o.id === votes[r]).label)}”`).join(' · ');
@@ -553,7 +585,7 @@ export function eventOverlay(S, d) {
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${optHTML}</div>
     ${advice ? `<p class="small mut" style="margin:0">${advice}</p>` : ''}
     ${mode === 'local' ? '<p class="tiny mut" style="margin:0">Every human player votes. Majority wins; the Commander breaks ties.</p>' : ''}
-    ${guest ? '<p class="small" style="margin:0;color:var(--am)">Cast your vote. The Commander confirms the crew decision.</p>' : ''}
+    ${spectator ? '<p class="small" style="margin:0;color:var(--am)">You are spectating. The crew is deciding.</p>' : guest ? '<p class="small" style="margin:0;color:var(--am)">Cast your vote. The Commander confirms the crew decision.</p>' : ''}
     ${resolve ? `<div class="row" style="justify-content:flex-end">${resolve}</div>` : ''}
   </div></div>`;
 }
@@ -562,14 +594,27 @@ export function outcomeOverlay(S, entry) {
   const guest = S.isGuest();
   return `<div class="overlay"><div class="modal ${entry.wise ? '' : 'amber'}" role="dialog" aria-labelledby="out-h" style="width:720px">
     <span class="kicker" style="color:${entry.wise ? 'var(--cy)' : 'var(--am)'}">${entry.wise ? 'WISE CALL · +300' : 'RISKY CALL'}</span>
-    <h2 id="out-h">${esc(entry.title)}</h2><p style="margin:0;font-size:16px"><span class="mut">You chose:</span> ${esc(entry.choice)}</p>
+    <h2 id="out-h">${esc(entry.title)}</h2><p style="margin:0;font-size:16px"><span class="mut">${S.replay ? 'The crew chose:' : 'You chose:'}</span> ${esc(entry.choice)}</p>
     <p style="margin:0;font-size:17px;line-height:1.45">${esc(entry.text)}</p>
     <div class="lesson"><span class="kicker">Why it matters</span><p>${esc(entry.lesson)}</p></div>
-    <div class="row" style="justify-content:flex-end">${guest ? '<span class="btn" aria-disabled="true">WAITING FOR COMMANDER</span>' : `<button class="btn primary ready" ${act('continueOps')} style="font-size:16px;min-height:52px">CONTINUE MISSION</button>`}</div>
+    <div class="row" style="justify-content:flex-end">${S.replay ? '<span class="badge amber">REPLAY · CONTINUES AUTOMATICALLY</span>' : guest ? '<span class="btn" aria-disabled="true">WAITING FOR COMMANDER</span>' : `<button class="btn primary ready" ${act('continueOps')} style="font-size:16px;min-height:52px">CONTINUE MISSION</button>`}</div>
+  </div></div>`;
+}
+
+function replayEndOverlay(S, d) {
+  const R = S.replay;
+  const f = R.final;
+  const same = f && Math.abs(f.total - R.storedScore) < 1;
+  return `<div class="overlay"><div class="modal amber" role="dialog" aria-labelledby="rp-h" style="width:640px;align-items:center;text-align:center">
+    <span class="kicker">Replay complete · day ${d.day}</span><h2 id="rp-h">${esc(f ? f.result : 'REPLAY COMPLETE')}</h2>
+    ${f ? `${starsHTML(f.stars, 38)}<div class="row" style="gap:28px;justify-content:center"><div class="col" style="align-items:center;gap:2px"><span class="kicker">Replayed score</span><span class="disp" style="font-size:34px;font-weight:900;color:var(--cy)">${fmtPts(f.total)}</span></div><div class="col" style="align-items:center;gap:2px"><span class="kicker">Saved score</span><span class="disp" style="font-size:34px;font-weight:900;color:var(--am)">${fmtPts(R.storedScore)}</span></div></div>
+    <p class="small mut" style="margin:0">${same ? 'The replay matches the saved score.' : 'The replay differs from the saved score. The game rules may have been updated since this run was flown.'}</p>` : '<p class="small mut" style="margin:0">Working out the score…</p>'}
+    <button class="btn primary ready" ${act('exitReplay')}>BACK TO LEADERBOARD</button>
   </div></div>`;
 }
 
 export function endOverlay(S, d) {
+  if (S.replay) return replayEndOverlay(S, d);
   const last = d.log[d.log.length - 1] || { title: 'Mission over', text: '' };
   const guest = S.isGuest();
   return `<div class="overlay"><div class="modal ${d.status === 'lost' ? 'pink' : 'amber'}" role="dialog" aria-labelledby="end-h" style="width:620px;align-items:center;text-align:center">
@@ -588,7 +633,9 @@ export function debriefView(S) {
   const maxBar = Math.max(1, ...bars.map((b) => b[1]));
   const tone = r.stars === 0 ? 'var(--pk)' : r.stars === 3 ? 'var(--cy)' : 'var(--am)';
   const decisions = S.finalSim.log.filter((l) => l.choice);
-  const canSubmit = S.netOk && S.cfg.mode !== 'sandbox' && !S.submitted && !guest;
+  const small = 'style="min-height:38px;padding:0 9px;gap:6px;font-size:11px;letter-spacing:.06em"';
+  const ranked = S.cfg.mode !== 'sandbox' && !S.unranked;
+  const canSubmit = S.netOk && ranked && (!S.submitted || !!S.submitted.error) && !guest;
   return `<div class="stars2"></div>
   <header class="hud"><div class="col" style="gap:4px;width:260px"><span class="kicker" style="color:var(--am)">${esc(m.name)} · ${esc(LEVELS[S.cfg.level].name)}</span><h1>DEBRIEF</h1></div><span class="small mut">Seed ${S.seed}${S.challenge ? ` · challenge ${esc(S.challenge)}` : ''}</span>${phaseBlock(4)}</header>
   <section class="panel abs slide-l" style="top:100px;left:24px;bottom:24px;width:400px" aria-labelledby="res-h">
@@ -599,9 +646,10 @@ export function debriefView(S) {
     <div class="col" style="gap:8px">${bars.map((b) => `<div class="scorebar"><span>${b[0]}</span><div class="bar"><i style="width:${Math.max(2, b[1] / maxBar * 100)}%;background:${b[2]}"></i></div><b>${fmtNum(b[1])}</b></div>`).join('')}</div>
     ${S.rankUp ? `<div class="lesson" style="border-color:var(--cy)"><span class="kicker" style="color:var(--cy)">Concept matured!</span><p>You reached CML ${S.rank}: ${esc(CML[S.rank - 1].name)}.</p></div>` : ''}
     <div data-r="submit" class="col" style="margin-top:auto;gap:8px">
-      ${S.submitted ? `<div class="lesson"><span class="kicker">Leaderboard</span><p>${esc(S.submitted.error ? S.submitted.error : `Ranked #${S.submitted.rank} as ${S.callsign} with ${fmtNum(S.submitted.score)} points.`)}</p></div>` : ''}
-      ${canSubmit ? `<button class="btn cyan" ${act('submitScore')}>${ICON.trophy} SUBMIT AS ${esc(S.callsign)}</button>` : ''}
-      ${!S.netOk ? '<p class="tiny mut" style="margin:0">Leaderboard available on the hosted version.</p>' : ''}
+      ${S.submitted ? `<div class="lesson"><span class="kicker">${S.runDaily ? 'Daily leaderboard' : 'Leaderboard'}</span><p>${esc(S.submitted.error ? S.submitted.error : `Ranked #${S.submitted.rank} as ${S.callsign} with ${fmtNum(S.submitted.score)} points.`)}</p></div>` : ''}
+      ${canSubmit && (S.runDaily || S.classCode) ? `<p class="tiny mut" style="margin:0">${S.runDaily ? `Daily challenge ${esc(S.runDaily)}. ` : ''}${S.classCode ? `This score also counts for Class ${esc(S.classCode)}.` : ''}</p>` : ''}
+      ${canSubmit ? `<button class="btn cyan" ${act('submitScore')}>${ICON.trophy} ${S.submitted && S.submitted.error ? 'TRY AGAIN' : 'SUBMIT'} AS ${esc(S.callsign)}</button>` : ''}
+      ${S.unranked && S.cfg.mode !== 'sandbox' ? '<div class="lesson"><span class="kicker">Offline run</span><p>Offline run: not ranked. Ranked runs need the server to start the mission.</p></div>' : !S.netOk ? '<p class="tiny mut" style="margin:0">Leaderboard available on the hosted version.</p>' : ''}
     </div>
   </section>
   <section class="panel abs slide-u" style="top:100px;left:440px;right:440px;bottom:24px" aria-labelledby="req-h">
@@ -611,8 +659,9 @@ export function debriefView(S) {
     <div class="row" style="flex-wrap:wrap;justify-content:center;gap:10px">
       ${guest ? '<span class="btn" aria-disabled="true">COMMANDER PICKS WHAT’S NEXT</span>' : `<button class="btn primary ready" ${act('redesign')} style="font-size:16px;min-height:52px">${ICON.refresh} REDESIGN &amp; FLY AGAIN</button><button class="btn" ${act('go', 'select')}>NEW MISSION</button>`}
     </div>
-    <div class="row" style="flex-wrap:wrap;justify-content:center;gap:8px">
-      <button class="btn ghost" ${act('share')}>${ICON.share} SHARE DESIGN</button><button class="btn ghost" ${act('report')}>${ICON.download} MISSION REPORT</button><button class="btn ghost" ${act('openBoard')}>${ICON.trophy} LEADERBOARD</button>
+    <div class="row" style="flex-wrap:wrap;justify-content:center;gap:6px 8px">
+      <button class="btn ghost" ${act('share')} ${small}>${ICON.share} SHARE DESIGN</button><button class="btn ghost" ${act('report')} ${small}>${ICON.download} MISSION REPORT</button><button class="btn ghost" ${act('openBoard')} ${small}>${ICON.trophy} LEADERBOARD</button>
+      ${S.isSpectator() ? '' : `<button class="btn cyan" ${act('saveCard')} ${S.cardBusy ? 'disabled' : ''} ${small}>${ICON.download} ${S.cardBusy ? 'MAKING IMAGE…' : 'SAVE RESULT CARD'}</button>`}${S.canShare && !S.isSpectator() ? `<button class="btn ghost" ${act('shareCard')} ${S.cardBusy ? 'disabled' : ''} ${small}>${ICON.share} SHARE RESULT</button>` : ''}
     </div>
   </section>
   <aside class="abs col slide-r" style="top:100px;right:24px;bottom:24px;width:400px;gap:14px">
@@ -620,19 +669,76 @@ export function debriefView(S) {
     <section class="panel grow scroll" aria-labelledby="dc-h" style="gap:8px"><h2 id="dc-h" class="label">Your decisions</h2>${decisions.length ? decisions.map((l) => `<div class="logline"><b style="color:${l.wise ? 'var(--cy)' : 'var(--am)'}">${l.wise ? '✓' : '!'} ${esc(l.title)}</b>${esc(l.choice)}: ${esc(l.text)}</div>`).join('') : '<p class="small mut" style="margin:0">No emergencies this time.</p>'}
       <div class="lesson" style="margin-top:auto"><span class="kicker">Real NASA missions like yours</span><p>${esc(m.twin)}</p></div></section>
   </aside>
+  <div class="abs tiny mut" style="left:0;right:0;bottom:4px;text-align:center">${originalBadge()}</div>
   ${commonRegions(S)}`;
 }
 
 // ---------- overlays shared by all screens ----------
+function boardRows(S, scores) {
+  return scores.map((s, i) => {
+    const id = Number(s.id);
+    const made = Date.parse(String(s.created_at || '').replace(' ', 'T') + 'Z');
+    const hidden = S.boardTab === 'today' || (S.boardQ && S.boardQ.challenge && Number.isFinite(made) && Date.now() - made < 3 * 3600 * 1000);
+    const watch = !hidden && Number.isInteger(id) && id > 0 ? `<button class="btn" ${act('watch', id)} aria-label="Watch the run by ${esc(s.callsign)}" style="min-height:32px;padding:0 10px;font-size:11px">${ICON.play} WATCH</button>` : '';
+    return `<tr class="${s.callsign === S.callsign ? 'me' : ''}"><td>${i + 1}</td><td class="disp" style="letter-spacing:.04em">${esc(s.callsign)}</td><td>${'★'.repeat(Math.max(0, Math.min(3, Number(s.stars) || 0)))}</td><td style="text-align:right" class="disp">${fmtNum(Number(s.score) || 0)}</td><td style="text-align:right">${watch}</td></tr>`;
+  }).join('');
+}
+
 export function boardOverlay(S) {
-  const b = S.board;
-  const rows = b && b.scores ? b.scores.map((s, i) => `<tr class="${s.callsign === S.callsign ? 'me' : ''}"><td>${i + 1}</td><td class="disp" style="letter-spacing:.04em">${esc(s.callsign)}</td><td>${'★'.repeat(Math.max(0, Math.min(3, Number(s.stars) || 0)))}</td><td style="text-align:right" class="disp">${fmtNum(Number(s.score) || 0)}</td></tr>`).join('') : '';
+  const today = S.boardTab === 'today';
+  const b = today ? S.dailyBoard : S.board;
+  const rows = b && b.scores ? boardRows(S, b.scores) : '';
+  let dm = null;
+  if (today && b && b.mission) dm = MISSIONS.find((x) => x.id === b.mission);
+  const table = `<table class="board"><thead><tr><th>#</th><th>Callsign</th><th>Stars</th><th style="text-align:right">Score</th><th style="text-align:right"><span class="sr">Replay</span></th></tr></thead><tbody>${rows}</tbody></table>`;
+  const body = !S.netOk ? '<p class="mut">The leaderboard needs the hosted version of the game.</p>' : !b ? '<p class="mut">Loading…</p>' : b.error ? `<p style="color:var(--pk)">${esc(b.error)}</p>` : rows ? table : `<p class="mut">${today ? 'No daily scores yet. Be the first!' : 'No scores yet. Be the first!'}</p>`;
+  const controls = today
+    ? `<p class="small" style="margin:0;color:var(--am)">${b && b.date ? `Daily challenge ${esc(b.date)}: ${esc(dm ? dm.name : b.mission)} · ${esc((LEVELS[b.level] || { name: b.level }).name)} level. Everyone flies the same mission and emergencies.` : 'Everyone flies the same mission and emergencies today.'}</p>`
+    : `<div class="seg-btns" style="grid-template-columns:repeat(5,minmax(0,1fr))">${MISSIONS.map((x) => `<button class="btn ${S.boardQ.mission === x.id ? 'on' : ''}" ${act('boardMission', x.id)}>${esc(x.name.toUpperCase())}</button>`).join('')}</div>
+    <div class="row between"><div class="seg-btns amber" style="grid-template-columns:repeat(3,140px)">${Object.values(LEVELS).map((l) => `<button class="btn ${S.boardQ.level === l.id ? 'on' : ''}" ${act('boardLevel', l.id)}>${l.name.toUpperCase()}</button>`).join('')}</div>${S.challenge ? `<button class="btn ${S.boardQ.challenge ? 'cyan' : ''}" ${act('boardChallenge')}>CHALLENGE ${esc(S.challenge)}</button>` : ''}</div>`;
   return `<div class="overlay"><div class="modal" role="dialog" aria-labelledby="lb-h" style="width:820px;height:700px">
     <div class="row between"><h2 id="lb-h">LEADERBOARD</h2><button class="iconbtn" ${act('closeOverlay')} aria-label="Close">${ICON.close}</button></div>
-    <div class="seg-btns" style="grid-template-columns:repeat(5,minmax(0,1fr))">${MISSIONS.map((x) => `<button class="btn ${S.boardQ.mission === x.id ? 'on' : ''}" ${act('boardMission', x.id)}>${esc(x.name.toUpperCase())}</button>`).join('')}</div>
-    <div class="row between"><div class="seg-btns amber" style="grid-template-columns:repeat(3,140px)">${Object.values(LEVELS).map((l) => `<button class="btn ${S.boardQ.level === l.id ? 'on' : ''}" ${act('boardLevel', l.id)}>${l.name.toUpperCase()}</button>`).join('')}</div>${S.challenge ? `<button class="btn ${S.boardQ.challenge ? 'cyan' : ''}" ${act('boardChallenge')}>CHALLENGE ${esc(S.challenge)}</button>` : ''}</div>
-    <div class="grow scroll">${!S.netOk ? '<p class="mut">The leaderboard needs the hosted version of the game.</p>' : !b ? '<p class="mut">Loading…</p>' : b.error ? `<p style="color:var(--pk)">${esc(b.error)}</p>` : rows ? `<table class="board"><thead><tr><th>#</th><th>Callsign</th><th>Stars</th><th style="text-align:right">Score</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="mut">No scores yet. Be the first!</p>'}</div>
-    <p class="tiny mut" style="margin:0">Scores are verified: the server replays every mission from its design, seed and decisions. Only generated callsigns are stored.</p>
+    <div class="seg-btns" role="group" aria-label="Leaderboard" style="grid-template-columns:repeat(2,minmax(0,1fr))"><button class="btn ${today ? '' : 'on'}" ${act('boardTab', 'top')} aria-pressed="${!today}">ALL-TIME</button><button class="btn ${today ? 'on' : ''}" ${act('boardTab', 'today')} aria-pressed="${today}">TODAY</button></div>
+    ${controls}
+    <div class="grow scroll">${body}</div>
+    <p class="tiny mut" style="margin:0">Scores are verified: the server replays every mission from its design, seed and decisions. Press WATCH to see a saved run (runs on today's daily board and fresh challenges unlock later, so nobody can copy a leader). Only generated callsigns are stored.</p>
+  </div></div>`;
+}
+
+// ---------- classroom ----------
+export function classOverlay(S) {
+  const u = S.classUi;
+  const net = S.netOk;
+  const off = net ? '' : 'disabled';
+  const d = u.data;
+  const validView = /^[A-Z0-9]{5}$/.test(u.viewInput);
+  const validKey = /^[A-Z0-9]{16}$/.test(u.keyInput);
+  const rows = d ? d.students.map((s, i) => `<tr><td>${i + 1}</td><td class="disp" style="letter-spacing:.04em">${esc(s.callsign)}</td><td class="disp" style="text-align:right">${fmtPts(s.best)}</td><td>${'★'.repeat(s.bestStars)}</td><td style="text-align:right">${fmtNum(s.runs)}</td><td class="small mut">${esc(s.missions.map((id) => (MISSIONS.find((m) => m.id === id) || { name: id }).name).join(', '))}</td></tr>`).join('') : '';
+  const created = u.created ? `<div class="lesson" style="border-color:var(--am)" role="status"><span class="kicker">Your class is ready</span>
+      <div class="row between"><span class="small">Class code (give this to students)</span><span class="row" style="gap:8px"><b class="disp" style="font-size:22px;letter-spacing:.3em;color:var(--am)">${esc(u.created.code)}</b><button class="btn" ${act('copyText', 'code')} style="min-height:32px;padding:0 10px;font-size:11px">COPY</button></span></div>
+      <div class="row between"><span class="small">Teacher key (keep it secret)</span><span class="row" style="gap:8px"><b class="disp" style="font-size:15px;letter-spacing:.14em;color:var(--pk)">${esc(u.created.teacherKey)}</b><button class="btn" ${act('copyText', 'key')} style="min-height:32px;padding:0 10px;font-size:11px">COPY</button></span></div>
+      <p class="small" style="margin:0;color:var(--pk)"><b>Save the teacher key now.</b> It is shown only this once and cannot be recovered. You need it to delete the class.</p></div>` : '';
+  const table = d ? (d.students.length ? `<table class="board"><thead><tr><th>#</th><th>Callsign</th><th style="text-align:right">Best</th><th>Stars</th><th style="text-align:right">Runs</th><th>Missions</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="mut" style="margin:0">No runs yet. Students appear here after they submit a score.</p>') : '<p class="mut" style="margin:0">Enter a class code and press VIEW CLASS.</p>';
+  return `<div class="overlay"><div class="modal" role="dialog" aria-labelledby="cl-h" style="width:1180px;height:720px">
+    <div class="row between"><h2 id="cl-h">CLASSROOM</h2><button class="iconbtn" ${act('closeOverlay')} aria-label="Close">${ICON.close}</button></div>
+    ${net ? '' : '<p class="small" style="margin:0;color:var(--am)">Classrooms need the online version of the game.</p>'}
+    <div class="grow" style="display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:18px;min-height:0">
+      <section class="panel" aria-labelledby="teach-h" style="min-height:0;overflow:hidden">
+        <h3 id="teach-h" class="label">Teacher</h3>
+        <div class="row" style="flex-wrap:wrap"><button class="btn cyan" ${act('createClass')} ${off || u.busy ? 'disabled' : ''}>CREATE CLASS</button><span class="small mut">Makes a class code for your students.</span></div>
+        ${created}
+        <div class="row"><input class="input" id="classView" maxlength="5" placeholder="CODE" aria-label="Class code to view" value="${esc(u.viewInput)}" ${act('typeClassView', undefined, 'data-input="1"')}><button class="btn" ${act('viewClass')} ${off || u.busy || !validView ? 'disabled' : ''}>VIEW CLASS</button><button class="btn ghost" ${act('printClass')} ${d && d.students.length ? '' : 'disabled'}>PRINT REPORT</button></div>
+        <div class="grow scroll" data-scroll="class">${u.error ? `<p style="color:var(--pk);margin:0 0 8px">${esc(u.error)}</p>` : ''}${table}</div>
+        <div class="row" style="flex-wrap:wrap"><input class="input" id="classKey" maxlength="16" placeholder="TEACHER KEY" aria-label="Teacher key" autocomplete="off" spellcheck="false" value="${esc(u.keyInput)}" ${act('typeTeacherKey', undefined, 'data-input="1" data-max="16"')} style="width:250px;letter-spacing:.12em;font-size:14px"><button class="btn ${u.armDelete ? 'cyan' : 'ghost'}" ${act('deleteClass')} ${off || u.busy || !validView || !validKey ? 'disabled' : ''} style="${u.armDelete ? 'border-color:var(--pk);color:var(--pk)' : ''}">${u.armDelete ? `CLICK AGAIN: DELETE ${esc(u.viewInput)} FOREVER` : 'DELETE CLASS'}</button></div>
+      </section>
+      <section class="panel" aria-labelledby="stu-h" style="min-height:0">
+        <h3 id="stu-h" class="label">Student</h3>
+        <p class="small mut" style="margin:0;line-height:1.45">Ask your teacher for the class code. While you are in a class, every score you submit also counts for the class.</p>
+        ${S.classCode ? `<div class="row between"><span class="chip good" style="font-size:14px;padding:6px 12px">You are in Class <b class="disp" style="letter-spacing:.12em">${esc(S.classCode)}</b></span><button class="btn ghost" ${act('leaveClass')}>LEAVE CLASS</button></div>` : `<div class="row"><input class="input" id="classJoin" maxlength="5" placeholder="CODE" aria-label="Class code to join" value="${esc(u.joinInput)}" ${act('typeClassJoin', undefined, 'data-input="1"')}><button class="btn cyan" ${act('joinClass')} ${u.busy || !/^[A-Z0-9]{5}$/.test(u.joinInput) ? 'disabled' : ''}>JOIN CLASS</button></div>`}
+        ${u.joinError ? `<p class="small" style="margin:0;color:var(--pk)">${esc(u.joinError)}</p>` : ''}
+        <div class="lesson" style="margin-top:auto"><span class="kicker">Privacy</span><p>Classes use a code and your generated callsign only. No names, no emails, no accounts.</p></div>
+      </section>
+    </div>
   </div></div>`;
 }
 
@@ -647,11 +753,23 @@ export function helpOverlay() {
       ${sec('Teams', li(['<b>Solo</b>: you are the Commander, with an AI crew giving advice.', '<b>Co-op</b>: 2–4 players share a device and vote on emergencies.', '<b>Online</b>: up to 4 players on their own devices. Each owns different parts; others can suggest changes.', '<b>Versus</b>: teams share a challenge code and get identical emergencies.', '<b>Sandbox</b>: no budget or mass limits.']))}
       ${sec('Scoring', li(['<b>Science</b> counts only data that reaches the ground.', '<b>Objectives</b>: 600 points per requirement met.', '<b>Efficiency</b>: leftover budget, health and battery.', '<b>Decisions</b>: 300 points per wise emergency call.', 'Earn 2+ stars to raise your Concept Maturity Level (JPL’s CML scale).']))}
       ${sec('Controls', li(['Click or tap everything. <kbd>Tab</kbd> moves between buttons, <kbd>Enter</kbd> presses.', 'During operations: <kbd>Space</kbd> pauses and resumes.', '<kbd>Esc</kbd> closes windows.']))}
-      ${sec('Credits', `<p class="small" style="margin:0;line-height:1.5">By Team SATIT Orbital.<br><span class="mut">Built for the 2026 NASA Space Apps Challenge with NASA mission-design resources. 3D graphics by Three.js (MIT). Fonts: Orbitron and Chakra Petch (SIL OFL). Made with assistance from Claude (Anthropic), a Super Intelligence (SI) tool, for ideas, code, graphics, sound and text. The game does not use SI while you play. NASA does not endorse this game.</span></p>`)}
+      ${sec('Credits', `<p class="small" style="margin:0;line-height:1.5">By Team SATIT Orbital.<br><span class="mut">Built for the 2026 NASA Space Apps Challenge with NASA mission-design resources. 3D graphics by Three.js (MIT). Fonts: Orbitron and Chakra Petch (SIL OFL). Made with assistance from Claude (Anthropic), a Super Intelligence (SI) tool, for ideas, code, graphics, sound and text. The game does not use SI while you play. NASA does not endorse this game.</span></p><p class="small" style="margin:8px 0 0">${originalBadge()}</p>`)}
       ${sec('About the numbers', `<p class="small mut" style="margin:0;line-height:1.5">Part masses, costs and rates are simplified for play. The trade-offs are real: more instruments mean more mass, power, cost and data; a weak radio wastes science; far from Earth you need bigger dishes and the Deep Space Network.</p>`)}
     </div></div></div>`;
 }
 
+// Small pills under the HUD: spectating, or the active daily challenge.
+function badgesHTML(S) {
+  if (S.screen === 'title') return '';
+  const out = [];
+  if (S.isSpectator()) out.push('<span class="pill cy" role="status">SPECTATING</span>');
+  if (S.daily && !S.replay && ['hangar', 'launch', 'ops', 'debrief'].includes(S.screen)) {
+    const m = MISSIONS.find((x) => x.id === S.daily.mission);
+    out.push(`<span class="pill">Daily challenge ${esc(S.daily.date)}: ${esc(m ? m.name : S.daily.mission)}</span>`);
+  }
+  return out.length ? `<div class="pillbar">${out.join('')}</div>` : '';
+}
+
 export function commonRegions(S) {
-  return `<div data-r="overlay">${S.overlayHTML()}</div><div data-r="launchtext">${launchText(S)}</div><div data-r="toast">${S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ''}</div>`;
+  return `<div data-r="overlay">${S.overlayHTML()}</div><div data-r="badges">${badgesHTML(S)}</div><div data-r="launchtext">${launchText(S)}</div><div data-r="toast">${S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : ''}</div>`;
 }

@@ -11,13 +11,29 @@ export async function probe() {
   } catch { return false; }
 }
 
-async function call(path, opts) {
-  const r = await fetch(path, opts);
+async function call(path, opts = {}, timeoutMs = 0) {
+  let timer = null;
+  const o = { ...opts };
+  if (timeoutMs && typeof AbortController !== 'undefined') {
+    const ctl = new AbortController();
+    o.signal = ctl.signal;
+    timer = setTimeout(() => ctl.abort(), timeoutMs);
+  }
+  let r;
+  try { r = await fetch(path, o); } catch (e) {
+    throw new Error('Could not reach the server. Check your connection and try again.');
+  } finally { clearTimeout(timer); }
   let body = null;
   try { body = await r.json(); } catch { /* not JSON */ }
-  if (!r.ok) throw new Error((body && body.error) || `Request failed (${r.status})`);
+  if (!r.ok) {
+    const err = new Error((body && typeof body.error === 'string' && body.error) || `Request failed (${r.status})`);
+    err.status = r.status;
+    throw err;
+  }
   return body;
 }
+
+const JSON_HEADERS = { 'content-type': 'application/json' };
 
 export function getLeaderboard(mission, level, challenge) {
   const q = new URLSearchParams({ mission, level });
@@ -26,7 +42,36 @@ export function getLeaderboard(mission, level, challenge) {
 }
 
 export function submitScore(payload) {
-  return call('/api/scores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+  return call('/api/scores', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(payload) });
+}
+
+// A server-issued seed for an open (ranked) run. Short timeout so an offline player is not kept waiting.
+export function issueSeed(mission, level) {
+  return call('/api/seed', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ mission, level }) }, 4000);
+}
+
+export function getDaily() {
+  return call('/api/daily', { cache: 'no-store' }, 6000);
+}
+
+export function getDailyBoard(date) {
+  const q = date ? `?date=${encodeURIComponent(date)}` : '';
+  return call(`/api/daily/leaderboard${q}`, { cache: 'no-store' });
+}
+
+export function getReplay(id) {
+  return call(`/api/replay?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
+}
+
+// Classroom (no free text anywhere: codes and generated callsigns only).
+export function createClass() {
+  return call('/api/class', { method: 'POST', headers: JSON_HEADERS, body: '{}' });
+}
+export function getClass(code) {
+  return call(`/api/class/${encodeURIComponent(code)}`, { cache: 'no-store' });
+}
+export function deleteClass(code, teacherKey) {
+  return call(`/api/class/${encodeURIComponent(code)}`, { method: 'DELETE', headers: { 'x-teacher-key': teacherKey } });
 }
 
 export function createRoom() {
@@ -34,8 +79,10 @@ export function createRoom() {
 }
 
 export class Room {
-  constructor(code, handlers) {
+  // opts.spectate: join as a watcher (no seat, cannot act).
+  constructor(code, handlers, opts = {}) {
     this.code = code;
+    this.spectate = !!opts.spectate;
     this.handlers = handlers;
     this.ws = null;
     this.closedByUser = false;
@@ -54,7 +101,8 @@ export class Room {
     ws.onopen = () => {
       this.retries = 0;
       // Rejoin the same seat after a reconnect.
-      ws.send(JSON.stringify({ t: 'join', want: this.role || this.want, token: this.token }));
+      if (this.spectate) ws.send(JSON.stringify({ t: 'join', spectate: true }));
+      else ws.send(JSON.stringify({ t: 'join', want: this.role || this.want, token: this.token }));
       clearInterval(this.beat);
       this.beat = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('ping'); }, 20000);
     };

@@ -3,12 +3,16 @@
 import { ROLES, ROLE_ORDER, SLOT_OWNER, SLOT_INFO, INSTRUMENTS, CALLSIGN_WORDS, MISSION_BY_ID, LEVELS, CATALOG, EVENTS } from './data.js';
 import {
   defaultConfig, normalizeConfig, evaluate, createSim, stepDay, decide, runMission, scoreMission, suggestions,
-  encodeDesign, decodeDesign, designSummary, fmtNum, fmtMoney, fmtData, CODE_RE, challengeSeed
+  encodeDesign, decodeDesign, designSummary, fmtNum, fmtMoney, fmtData, CODE_RE, challengeSeed, isMission
 } from './engine.js';
 import * as V from './views.js';
 import { sfx, setMuted, startAmbient, stopAmbient } from './fx.js';
 import * as G from './scene3d.js';
 import * as net from './net.js';
+import * as card from './card.js';
+import * as replay from './replay.js';
+import * as classroom from './classroom.js';
+import { ORIGIN, showCopyNotice } from './provenance.js';
 
 const stage = document.getElementById('stage');
 const live = document.getElementById('live');
@@ -47,12 +51,19 @@ const S = {
   cfg: defaultConfig('fire', 'cadet', 'solo'),
   tab: 'bus', msg: 0, players: 2,
   challenge: '', roomInput: '',
-  online: { status: 'off', code: '', role: null, seats: {}, error: '' },
+  online: { status: 'off', code: '', role: null, seats: {}, error: '', spectators: 0 },
   netOk: false,
+  watchInput: '',
+  // daily challenge (S.daily = the chosen day's fixed mission), server-issued seeds, replays, classroom, result card
+  daily: null, dailyLoading: false, runDaily: '', seedId: null, unranked: false, starting: false,
+  replay: null, watching: 0, dailyBoard: null,
+  classCode: classroom.getStoredClass(), classOpen: false,
+  classUi: { busy: false, error: '', created: null, viewInput: '', data: null, keyInput: '', armDelete: false, joinInput: '', joinError: '' },
+  cardBusy: false, canShare: card.canShareFiles(),
   seed: 0, sim: null, runCfg: null, snap: null, speed: 1, acc: 0, votes: {}, outcome: null,
   launchSeq: null,
   result: null, sugg: [], finalSim: null, submitted: null, rankUp: false, rankAwarded: false,
-  board: null, boardOpen: false, boardQ: { mission: 'fire', level: 'cadet', challenge: false },
+  board: null, boardOpen: false, boardTab: 'top', boardQ: { mission: 'fire', level: 'cadet', challenge: false },
   helpOpen: false, toast: '',
   rank: store.get('rank', 1), callsign: store.get('callsign', null) || newCallsign(), muted: store.get('muted', false),
   demoEv: evaluate(demoCfg, 'hangar'),
@@ -60,6 +71,7 @@ const S = {
   ev: null,
 
   isGuest() { return this.cfg.mode === 'online' && this.online.status === 'in' && this.online.role !== 'cmd'; },
+  isSpectator() { return this.cfg.mode === 'online' && this.online.status === 'in' && this.online.role === 'spectator'; },
   myRole() { return this.cfg.mode === 'online' && this.online.status === 'in' ? this.online.role : 'cmd'; },
   ownerOf(slot) { return SLOT_OWNER[slot] || 'ops'; },
   canEdit(slot) {
@@ -102,11 +114,12 @@ const S = {
   overlayHTML() {
     if (this.helpOpen) return V.helpOverlay();
     if (this.boardOpen) return V.boardOverlay(this);
+    if (this.classOpen) return V.classOverlay(this);
     if (this.screen === 'launch' && this.launchSeq) return V.launchOverlay(this);
     if (this.screen === 'ops') {
       const d = opsData();
       if (!d) return V.groundOverlay(this);
-      const outcome = this.isGuest() ? d.outcome : this.outcome;
+      const outcome = this.isGuest() || this.replay ? d.outcome : this.outcome;
       if (outcome) return V.outcomeOverlay(this, outcome);
       if (d.pending) return V.eventOverlay(this, d);
       if (d.status !== 'running') return V.endOverlay(this, d);
@@ -119,7 +132,7 @@ setMuted(S.muted);
 
 function phaseFor(screen) { return screen === 'hangar' ? 'hangar' : screen === 'launch' ? 'launch' : 'ops'; }
 
-function snapshot(sim) {
+function snapshot(sim, outcome = S.outcome) {
   const ev = sim._ev;
   return {
     day: sim.day, days: sim.days, health: sim.health, battery: sim.battery, stored: sim.stored, storage: ev.storage,
@@ -127,10 +140,11 @@ function snapshot(sim) {
     budgetLeft: sim.budgetLeft, budgetStart: sim.budgetStart, opsStart: sim.opsStart, sandbox: sim.sandbox,
     status: sim.status, endReason: sim.endReason, events: sim.events, eventIdx: sim.eventIdx, pending: sim.pending,
     log: sim.log.slice(-10), history: sim.history, today: sim.today, powerLimitedDays: sim.powerLimitedDays, wise: sim.wise,
-    outcome: S.outcome
+    outcome
   };
 }
 function opsData() {
+  if (S.replay) return snapshot(S.replay.sim, S.replay.outcome);
   if (S.isGuest()) return S.snap;
   return S.sim ? snapshot(S.sim) : null;
 }
@@ -159,6 +173,7 @@ function render() {
   if (S.screen === 'title') html += V.commonRegions(S);
   const active = document.activeElement;
   const focusKey = active && active.dataset && active.dataset.act ? `${active.dataset.act}|${active.dataset.arg || ''}` : null;
+  const caret = active && active.dataset && active.dataset.input && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null;
 
   if (lastScreen !== S.screen) {
     // Page transition: the old screen blurs out, the new one flies in.
@@ -207,14 +222,17 @@ function render() {
   if (focusKey && document.activeElement !== active) {
     const [a, g] = focusKey.split('|');
     const el = [...stage.querySelectorAll(`[data-act="${a}"]`)].find((x) => (x.dataset.arg || '') === g);
-    if (el) el.focus({ preventScroll: true });
+    if (el) {
+      el.focus({ preventScroll: true });
+      if (caret && el.setSelectionRange) { try { el.setSelectionRange(Math.min(caret[0], el.value.length), Math.min(caret[1], el.value.length)); } catch { /* not a text input */ } }
+    }
   }
   afterRender(false);
 }
 
 function afterRender(entered) {
   sync3d();
-  if (S.screen === 'ops' && (S.sim || S.snap)) startAmbient(); else stopAmbient();
+  if (S.screen === 'ops' && (S.sim || S.snap || S.replay)) startAmbient(); else stopAmbient();
   const dp = stage.querySelector('.dialog p');
   const txt = dp ? dp.textContent : '';
   if (txt && txt !== lastDialog && (S.screen === 'hangar' || S.screen === 'launch')) sfx.type(8);
@@ -253,7 +271,7 @@ function sync3d() {
   else {
     const d = opsData();
     const running = !!(d && d.status === 'running');
-    const busy = !d || !running || d.pending || (S.isGuest() ? d.outcome : S.outcome);
+    const busy = !d || !running || d.pending || (S.isGuest() || S.replay ? d.outcome : S.outcome);
     cfg = { ...base, mode: 'ops', target: m.target, orbitId: S.cfg.orbitId, ev: S.ev, interactive: true,
       timeScale: busy ? 0.25 : (SPEED_SCALE[S.speed] ?? 1), sending: !!(running && !busy && d.today.sent > 0), alert: !!(d && d.pending) };
   }
@@ -281,11 +299,14 @@ window.addEventListener('resize', fit);
 // ---------- run lifecycle ----------
 function resetRun() {
   S.sim = null; S.runCfg = null; S.snap = null; S.outcome = null; S.votes = {}; S.result = null; S.finalSim = null;
-  S.submitted = null; S.rankUp = false; S.rankAwarded = false; S.acc = 0;
+  S.submitted = null; S.rankUp = false; S.rankAwarded = false; S.acc = 0; S.cardBlob = null; cardToken++;
+  S.seedId = null; S.unranked = false; S.runDaily = '';
 }
 
 function go(screen) {
+  if (S.replay) return; // a replay is left with BACK TO LEADERBOARD
   if (S.isGuest() && screen !== 'title') return;
+  if (screen === 'title' || screen === 'select') S.daily = null; // leaving the daily challenge
   if (screen === 'launch' && !evaluate(S.cfg, 'hangar').ready) { sfx.error(); return; }
   if (screen === 'debrief') { if (!S.sim || S.sim.status === 'running') return; finishDebrief(S.sim); }
   if (screen === 'select' || screen === 'hangar' || screen === 'title') { if (S.screen === 'debrief' || S.screen === 'ops') resetRun(); }
@@ -305,10 +326,20 @@ function finishDebrief(sim) {
   S.sugg = suggestions(S.cfg, sim);
   if (!S.rankAwarded) {
     S.rankAwarded = true;
-    if (S.result.stars >= 2 && S.rank < 4 && S.cfg.mode !== 'sandbox') { S.rank++; S.rankUp = true; store.set('rank', S.rank); }
+    if (S.result.stars >= 2 && S.rank < 4 && S.cfg.mode !== 'sandbox' && !S.isSpectator()) { S.rank++; S.rankUp = true; store.set('rank', S.rank); }
   }
   if (S.result.stars >= 2) setTimeout(() => sfx.fanfare(), 250); else if (S.result.stars === 0) sfx.fail();
   for (let i = 0; i < S.result.stars; i++) setTimeout(() => sfx.ding(i), 700 + i * 350);
+  prepareCard();
+}
+
+// Draw the result card in the background so SAVE and SHARE can use it straight away.
+let cardToken = 0;
+function prepareCard() {
+  S.cardBlob = null;
+  const token = ++cardToken;
+  if (!S.result || S.isSpectator()) return;
+  card.drawCard(S).then((c) => card.canvasToBlob(c)).then((b) => { if (token === cardToken) S.cardBlob = b; }).catch(() => { /* built on demand instead */ });
 }
 
 const LAUNCH_STEPS = {
@@ -355,11 +386,29 @@ function finishLaunch() {
   pushState();
 }
 
-function startMission() {
-  if (S.isGuest()) return;
+// Seeds: ranked open runs get a server-issued seed (so a score can be checked), daily runs use the day's seed,
+// challenge runs use the challenge code, sandbox is local. If the server cannot be reached the run is unranked.
+async function startMission() {
+  if (S.isGuest() || S.starting) return;
   const ev = evaluate(S.cfg, 'ops');
   if (!ev.ready) { sfx.error(); return; }
-  S.seed = S.cfg.mode === 'versus' && CODE_RE.test(S.challenge) ? challengeSeed(S.challenge, S.cfg.missionId, S.cfg.level) : randomInt();
+  const sandbox = S.cfg.mode === 'sandbox';
+  let seed, seedId = null, unranked = false, runDaily = '';
+  if (S.daily && !sandbox) { seed = S.daily.seed >>> 0; runDaily = S.daily.date; }
+  else if (S.cfg.mode === 'versus' && CODE_RE.test(S.challenge)) seed = challengeSeed(S.challenge, S.cfg.missionId, S.cfg.level);
+  else if (sandbox) seed = randomInt();
+  else if (S.netOk) {
+    S.starting = true;
+    render();
+    try {
+      const r = await net.issueSeed(S.cfg.missionId, S.cfg.level);
+      if (!r || !/^[A-Za-z0-9]{8,32}$/.test(String(r.id)) || !Number.isFinite(Number(r.seed))) throw new Error('bad seed');
+      seed = Number(r.seed) >>> 0; seedId = String(r.id);
+    } catch { seed = randomInt(); unranked = true; }
+    S.starting = false;
+    if (S.screen !== 'ops' || S.sim || S.isGuest() || S.replay) { render(); return; } // the player moved on while we waited
+  } else { seed = randomInt(); unranked = true; }
+  S.seed = seed; S.seedId = seedId; S.unranked = unranked; S.runDaily = runDaily;
   S.runCfg = structuredClone(S.cfg);
   S.sim = createSim(S.runCfg, S.seed);
   S.speed = 1; S.acc = 0; S.votes = {}; S.outcome = null;
@@ -394,7 +443,18 @@ function majority() {
 
 // ---------- simulation loop ----------
 let tickN = 0;
+function replayTick() {
+  const R = S.replay;
+  if (S.helpOpen || S.boardOpen) return;
+  const prev = R.phase;
+  if (!replay.advance(R, 100, S.speed)) return;
+  if (R.phase === 'dialog' && prev !== 'dialog') sfx.alert();
+  if (R.phase === 'outcome' && prev === 'dialog') { if (R.outcome && R.outcome.wise) sfx.equip(); else sfx.error(); }
+  if (R.phase === 'end' && prev !== 'end') { if (R.sim.status === 'lost') sfx.fail(); else sfx.success(); }
+  render();
+}
 setInterval(() => {
+  if (S.screen === 'ops' && S.replay) { replayTick(); return; }
   if (S.screen !== 'ops' || !S.sim || S.isGuest()) return;
   const sim = S.sim;
   if (sim.status !== 'running' || sim.pending || S.outcome || S.speed === 0 || S.helpOpen || S.boardOpen) return;
@@ -422,7 +482,7 @@ function sharedState() {
   };
 }
 function pushState() {
-  if (!room || S.online.status !== 'in') return;
+  if (!room || S.online.status !== 'in' || S.isSpectator()) return;
   clearTimeout(pushTimer);
   pushTimer = setTimeout(() => room.send({ t: 'state', state: sharedState() }), 100);
 }
@@ -443,7 +503,7 @@ function mergeOwned(cfg, by) {
 }
 
 function applyState(st, by) {
-  if (!st || typeof st !== 'object' || !st.cfg) return;
+  if (!st || typeof st !== 'object' || !st.cfg || S.replay) return;
   const cfg = normalizeConfig({ ...st.cfg, mode: 'online' });
   if (!S.isGuest()) {
     // Commander: merge crew edits only while designing, then rebroadcast the authoritative state.
@@ -510,17 +570,27 @@ function currentEvent() {
   return d && d.pending ? d : null;
 }
 
-function connectRoom(code, want) {
+function connectRoom(code, want, spectate = false) {
   if (room) room.leave();
-  S.online = { status: 'connecting', code, role: null, seats: {}, error: '' };
+  S.online = { status: 'connecting', code, role: null, seats: {}, error: '', spectators: 0 };
+  const spectatorCount = (v) => Math.max(0, Math.min(99, Math.round(num(v))));
   room = new net.Room(code, {
     welcome: (m) => {
-      S.online = { status: 'in', code, role: m.role, seats: m.seats || {}, error: '' };
+      if (spectate && m.role !== 'spectator') { // the server did not treat us as a spectator: never take a seat by accident
+        if (room) room.leave();
+        room = null;
+        S.online = { status: 'off', code: '', role: null, seats: {}, error: 'This server does not support watching rooms yet.', spectators: 0 };
+        render();
+        return;
+      }
+      const seats = {};
+      for (const r of ROLE_ORDER) if (m.seats && m.seats[r]) seats[r] = true;
+      S.online = { status: 'in', code, role: spectate ? 'spectator' : m.role, seats, error: '', spectators: spectatorCount(m.spectators) };
       S.cfg.mode = 'online';
       sfx.success();
       if (m.role === 'cmd') pushState();
       else if (m.state) applyState(m.state, 'cmd');
-      toast(`Joined room ${code} as ${ROLES[m.role].name}`);
+      toast(spectate ? `Watching room ${code}` : `Joined room ${code} as ${ROLES[m.role].name}`);
     },
     state: (m) => applyState(m.state, m.by),
     ops: (m) => {
@@ -538,22 +608,24 @@ function connectRoom(code, want) {
       render();
     },
     suggest: (m) => {
-      const slot = SLOT_INFO[m.slot] ? SLOT_INFO[m.slot].name : m.slot;
-      const name = INSTRUMENTS[m.option] ? INSTRUMENTS[m.option].name : (Object.values(CATALOG).flatMap((c) => c[m.slot] || []).find((o) => o.id === m.option) || {}).name || m.option;
+      if (S.isSpectator() || !ROLES[m.role]) return;
+      const slot = SLOT_INFO[m.slot] ? SLOT_INFO[m.slot].name : String(m.slot).slice(0, 30);
+      const name = INSTRUMENTS[m.option] ? INSTRUMENTS[m.option].name : (Object.values(CATALOG).flatMap((c) => c[m.slot] || []).find((o) => o.id === m.option) || {}).name || String(m.option).slice(0, 40);
       sfx.beep();
       toast(`${ROLES[m.role].name} suggests: ${name} (${slot})`);
     },
     seats: (m) => {
       S.online.seats = {};
       for (const r of ROLE_ORDER) if (m.seats && m.seats[r]) S.online.seats[r] = true;
+      if (m.spectators !== undefined) S.online.spectators = spectatorCount(m.spectators);
       render();
       // Bring newcomers up to date right away.
       if (S.online.role === 'cmd') { pushState(); broadcastOps(true); }
     },
-    full: () => { S.online = { status: 'off', code: '', role: null, seats: {}, error: 'That room is full (4 crew max).' }; room.leave(); room = null; render(); },
+    full: () => { S.online = { status: 'off', code: '', role: null, seats: {}, error: spectate ? 'That room has no free places for spectators.' : 'That room is full (4 crew max).', spectators: 0 }; if (room) room.leave(); room = null; render(); },
     reconnecting: () => { toast('Connection lost. Reconnecting…'); },
-    close: () => { S.online = { status: 'off', code: '', role: null, seats: {}, error: 'Disconnected from the room.' }; room = null; render(); }
-  });
+    close: () => { S.online = { status: 'off', code: '', role: null, seats: {}, error: 'Disconnected from the room.', spectators: 0 }; room = null; render(); }
+  }, { spectate });
   room.connect(want);
   render();
 }
@@ -565,14 +637,45 @@ function leaveRoom() {
 
 // ---------- leaderboard ----------
 async function loadBoard() {
-  S.board = null;
+  const today = S.boardTab === 'today';
+  if (today) S.dailyBoard = null; else S.board = null;
   render();
   if (!S.netOk) return;
   try {
-    const q = S.boardQ;
-    S.board = await net.getLeaderboard(q.mission, q.level, q.challenge ? S.challenge : '');
-  } catch (e) { S.board = { error: e.message }; }
+    if (today) {
+      const j = await net.getDailyBoard();
+      S.dailyBoard = { date: str(j && j.date, 10), mission: str(j && j.mission, 20), level: str(j && j.level, 10), scores: Array.isArray(j && j.scores) ? j.scores.slice(0, 50) : [] };
+    } else {
+      const q = S.boardQ;
+      S.board = await net.getLeaderboard(q.mission, q.level, q.challenge ? S.challenge : '');
+    }
+  } catch (e) { if (today) S.dailyBoard = { error: e.message }; else S.board = { error: e.message }; }
   render();
+}
+
+// ---------- watch a saved run ----------
+function startReplay(R) {
+  R.saved = { screen: S.screen, cfg: S.cfg, speed: S.speed, msg: S.msg };
+  S.replay = R;
+  S.cfg = R.cfg;
+  S.boardOpen = false; S.toast = '';
+  S.speed = 1; S.msg = 0;
+  S.screen = 'ops';
+  sfx.success();
+  render();
+}
+
+function downloadBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function setClass(code) {
+  S.classCode = code;
+  classroom.setStoredClass(code);
 }
 
 // ---------- report ----------
@@ -600,7 +703,8 @@ function reportText() {
 // ---------- actions ----------
 const A = {
   go: (s) => go(s),
-  pickMission: (id) => { S.cfg = defaultConfig(id, S.cfg.level, S.cfg.mode); S.tab = 'bus'; resetRun(); sfx.click(); render(); pushState(); },
+  pickMission: (id) => {
+    if (S.daily) return; S.cfg = defaultConfig(id, S.cfg.level, S.cfg.mode); S.tab = 'bus'; resetRun(); sfx.click(); render(); pushState(); },
   pickMode: (mode) => {
     if (S.cfg.mode === 'online' && mode !== 'online') leaveRoom();
     S.cfg.mode = mode;
@@ -617,6 +721,7 @@ const A = {
   tab: (t) => { S.tab = t; sfx.click(); render(); },
   pickPart: (arg) => {
     const [slot, id] = arg.split(':');
+    if (S.isSpectator()) return;
     if (!S.canEdit(slot)) { room && room.send({ t: 'suggest', slot, option: id }); toast(`Suggestion sent to your ${ROLES[S.ownerOf(slot)].name}.`); return; }
     if (S.cfg.design.sel[slot] === id) return;
     const before = evaluate(S.cfg, 'hangar').bad.length;
@@ -625,6 +730,7 @@ const A = {
     render(); pushState();
   },
   toggleInst: (id) => {
+    if (S.isSpectator()) return;
     if (!S.canEdit('inst')) { room && room.send({ t: 'suggest', slot: 'inst', option: id }); toast('Suggestion sent to your Scientist.'); return; }
     const before = evaluate(S.cfg, 'hangar').bad.length;
     S.cfg.design.inst[id] = !S.cfg.design.inst[id]; S.msg = 0;
@@ -642,6 +748,7 @@ const A = {
   choose: (id) => decideNow(id),
   vote: (arg) => {
     const [role, opt] = arg.split(':');
+    if (S.isSpectator()) return;
     if (S.cfg.mode === 'online') {
       if (role !== S.myRole()) return;
       S.votes[role] = opt;
@@ -654,15 +761,168 @@ const A = {
   continueOps: () => { S.outcome = null; sfx.click(); render(); broadcastOps(true); },
   redesign: () => { resetRun(); S.screen = 'hangar'; S.msg = 0; sfx.click(); render(); pushState(); },
   submitScore: async () => {
-    if (!S.finalSim || S.submitted) return;
+    if (!S.finalSim || (S.submitted && !S.submitted.error) || S.unranked) return;
+    const challenge = S.cfg.mode === 'versus' && CODE_RE.test(S.challenge) ? S.challenge : '';
+    if (!challenge && !S.runDaily && !S.seedId) return; // nothing the server could verify
     S.submitted = { pending: true, rank: '…', score: S.result.total };
     render();
+    // The server re-plays the run itself: we send the design, the decisions and which seed we were given, never a score.
+    const payload = { config: S.runCfg || S.cfg, decisions: S.finalSim.decisions, callsign: S.callsign };
+    if (challenge) payload.challenge = challenge;
+    else if (S.runDaily) payload.daily = S.runDaily;
+    else payload.seedId = S.seedId;
+    if (S.classCode) payload.class = S.classCode;
     try {
-      const res = await net.submitScore({ config: S.runCfg || S.cfg, seed: S.seed, decisions: S.finalSim.decisions, callsign: S.callsign, challenge: S.cfg.mode === 'versus' ? S.challenge : null });
-      S.submitted = res;
+      try { S.submitted = await net.submitScore(payload); }
+      catch (e) {
+        // The class was deleted (or never existed): leave it and send the score without it. The seed is not spent on a rejected submit.
+        if (payload.class && /unknown class/i.test(String(e && e.message))) {
+          setClass(''); delete payload.class;
+          toast('That class no longer exists, so you left it. Your score was sent on its own.');
+          S.submitted = await net.submitScore(payload);
+        } else throw e;
+      }
       sfx.success();
     } catch (e) { S.submitted = { error: e.message }; sfx.error(); }
     render();
+  },
+  saveCard: async () => {
+    if (!S.result || S.cardBusy) return;
+    S.cardBusy = true; render();
+    try {
+      const blob = S.cardBlob || await card.canvasToBlob(await card.drawCard(S));
+      downloadBlob(blob, `satit-orbital-${S.cfg.missionId}-${S.result.stars}-stars.png`);
+      toast('Result card saved as a PNG.');
+    } catch { toast('Sorry, the result card could not be made in this browser.'); }
+    S.cardBusy = false; render();
+  },
+  shareCard: async () => {
+    if (!S.result || S.cardBusy) return;
+    if (!S.cardBlob) { // not ready yet: build it now, then ask for another tap (browsers need the share inside the tap)
+      S.cardBusy = true; render();
+      try { S.cardBlob = await card.canvasToBlob(await card.drawCard(S)); toast('Your result card is ready. Tap SHARE RESULT again.'); } catch { toast('Sorry, the result card could not be made in this browser.'); }
+      S.cardBusy = false; render();
+      return;
+    }
+    S.cardBusy = true; render();
+    try {
+      const blob = S.cardBlob;
+      const file = new File([blob], `satit-orbital-${S.cfg.missionId}.png`, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'SATIT Orbital result', text: `${S.result.stars} of 3 stars on ${MISSION_BY_ID[S.cfg.missionId].name} in SATIT Orbital: ${ORIGIN.liveUrl}` });
+      } else toast('Sharing images is not supported here. Use SAVE RESULT CARD instead.');
+    } catch (e) { if (!e || e.name !== 'AbortError') toast('Sharing did not work. Use SAVE RESULT CARD instead.'); }
+    S.cardBusy = false; render();
+  },
+  openDaily: async () => {
+    if (!S.netOk || S.dailyLoading) return;
+    S.dailyLoading = true;
+    try {
+      const j = await net.getDaily();
+      const date = String(j && j.date);
+      const mission = String(j && j.mission);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !isMission(mission) || !Number.isFinite(Number(j.seed))) throw new Error('bad daily');
+      S.daily = { date, mission, seed: Number(j.seed) >>> 0, endsAt: Number(j.endsAt) || 0 };
+      S.cfg = defaultConfig(mission, 'eng', 'solo');
+      S.challenge = ''; S.tab = 'bus';
+      resetRun();
+      S.dailyLoading = false;
+      go('hangar');
+    } catch {
+      S.dailyLoading = false;
+      toast('The daily challenge is not available right now. Please try again in a moment.');
+    }
+  },
+  watch: async (arg) => {
+    const id = Number(arg);
+    if (!Number.isInteger(id) || id <= 0 || S.watching) return;
+    if (S.online.status !== 'off') { toast('Leave the room first, then you can watch a replay.'); return; }
+    S.watching = id;
+    toast('Loading replay…');
+    try {
+      const parsed = replay.parseReplay(await net.getReplay(id));
+      if (!parsed.ok) throw new Error(parsed.error);
+      startReplay(parsed.replay);
+    } catch (e) { toast(e && e.message ? e.message : 'That replay is not available.'); }
+    S.watching = 0;
+  },
+  exitReplay: () => {
+    const R = S.replay;
+    if (!R) return;
+    S.replay = null;
+    S.cfg = R.saved.cfg; S.screen = R.saved.screen; S.speed = R.saved.speed; S.msg = R.saved.msg;
+    S.boardOpen = true;
+    sfx.click(); render();
+  },
+  boardTab: (t) => { S.boardTab = t === 'today' ? 'today' : 'top'; loadBoard(); },
+  // ----- classroom -----
+  openClass: () => { S.classOpen = true; S.classUi.error = ''; S.classUi.joinError = ''; sfx.click(); render(); },
+  createClass: async () => {
+    const u = S.classUi;
+    if (!S.netOk || u.busy) return;
+    u.busy = true; u.error = ''; render();
+    try {
+      const j = await net.createClass();
+      if (!j || !CODE_RE.test(String(j.code)) || !classroom.KEY_RE.test(String(j.teacherKey))) throw new Error('The server sent an unexpected answer. Please try again.');
+      u.created = { code: j.code, teacherKey: j.teacherKey };
+      u.viewInput = j.code; u.data = null; u.armDelete = false;
+      sfx.success();
+    } catch (e) { u.error = e.message; sfx.error(); }
+    u.busy = false; render();
+  },
+  viewClass: async () => {
+    const u = S.classUi;
+    if (u.busy) return;
+    if (!CODE_RE.test(u.viewInput)) { u.error = 'Class codes have 5 letters and numbers (no 0, 1, I, L or O).'; sfx.error(); render(); return; }
+    u.busy = true; u.error = ''; u.armDelete = false; render();
+    try {
+      const data = classroom.cleanClass(await net.getClass(u.viewInput));
+      if (!data) throw new Error('The server sent an unexpected answer.');
+      u.data = data;
+    } catch (e) { u.data = null; u.error = e.status === 404 ? 'No class with that code.' : e.message; }
+    u.busy = false; render();
+  },
+  printClass: () => { if (S.classUi.data) classroom.printReport(S.classUi.data); },
+  deleteClass: async () => {
+    const u = S.classUi;
+    if (u.busy || !CODE_RE.test(u.viewInput) || !classroom.KEY_RE.test(u.keyInput)) return;
+    if (!u.armDelete) { u.armDelete = true; sfx.warn(); render(); return; } // a second click confirms (no pop-up)
+    const code = u.viewInput;
+    u.armDelete = false; u.busy = true; u.error = ''; render();
+    try {
+      await net.deleteClass(code, u.keyInput);
+      u.data = null; u.keyInput = '';
+      if (u.created && u.created.code === code) u.created = null;
+      if (S.classCode === code) setClass('');
+      toast(`Class ${code} was deleted.`);
+    } catch (e) { u.error = e.status === 403 ? 'That teacher key does not match this class.' : e.status === 404 ? 'No class with that code.' : e.message; sfx.error(); }
+    u.busy = false; render();
+  },
+  copyText: async (what) => {
+    const c = S.classUi.created;
+    if (!c) return;
+    const text = what === 'key' ? c.teacherKey : c.code;
+    try { await navigator.clipboard.writeText(text); toast(what === 'key' ? 'Teacher key copied. Keep it somewhere safe.' : 'Class code copied.'); } catch { toast('Copy did not work. Select the text and copy it by hand.'); }
+  },
+  joinClass: async () => {
+    const u = S.classUi;
+    if (u.busy) return;
+    if (!CODE_RE.test(u.joinInput)) { u.joinError = 'Class codes have 5 letters and numbers (no 0, 1, I, L or O).'; sfx.error(); render(); return; }
+    u.busy = true; u.joinError = ''; render();
+    let ok = false;
+    if (!S.netOk) u.joinError = 'Joining a class needs an internet connection.';
+    else {
+      try { await net.getClass(u.joinInput); ok = true; }
+      catch (e) { u.joinError = e && e.status === 404 ? 'No class with that code. Check it with your teacher.' : 'Could not reach the server to check that code. Try again.'; }
+    }
+    if (ok) { setClass(u.joinInput); u.joinInput = ''; sfx.success(); toast(`You joined Class ${S.classCode}.`); } else sfx.error();
+    u.busy = false; render();
+  },
+  leaveClass: () => { setClass(''); sfx.click(); render(); },
+  watchRoom: () => {
+    const code = (S.watchInput || '').toUpperCase().trim();
+    if (!/^[A-Z0-9]{5}$/.test(code)) { S.online.error = 'Room codes have 5 letters and numbers.'; sfx.error(); render(); return; }
+    connectRoom(code, null, true);
   },
   share: async () => {
     const url = `${location.origin}/#d=${encodeDesign(S.cfg)}`;
@@ -676,12 +936,12 @@ const A = {
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   },
-  openBoard: () => { S.boardOpen = true; S.boardQ = { mission: S.cfg.missionId, level: S.cfg.level, challenge: S.cfg.mode === 'versus' && !!S.challenge }; loadBoard(); },
+  openBoard: () => { S.boardOpen = true; S.boardTab = S.daily && S.screen !== 'title' ? 'today' : 'top'; S.boardQ = { mission: S.cfg.missionId, level: S.cfg.level, challenge: S.cfg.mode === 'versus' && !!S.challenge }; loadBoard(); },
   boardMission: (id) => { S.boardQ.mission = id; loadBoard(); },
   boardLevel: (l) => { S.boardQ.level = l; loadBoard(); },
   boardChallenge: () => { S.boardQ.challenge = !S.boardQ.challenge; loadBoard(); },
   openHelp: () => { S.helpOpen = true; render(); },
-  closeOverlay: () => { S.helpOpen = false; S.boardOpen = false; render(); },
+  closeOverlay: () => { S.helpOpen = false; S.boardOpen = false; S.classOpen = false; S.classUi.created = null; S.classUi.keyInput = ''; S.classUi.armDelete = false; render(); },
   toggleMute: () => { S.muted = !S.muted; setMuted(S.muted); store.set('muted', S.muted); render(); },
   reroll: () => { S.callsign = newCallsign(); store.set('callsign', S.callsign); sfx.click(); render(); },
   newChallenge: () => { S.challenge = newCode(); sfx.click(); render(); pushState(); },
@@ -712,17 +972,31 @@ stage.addEventListener('pointerover', (e) => {
 stage.addEventListener('input', (e) => {
   const el = e.target;
   if (!el.dataset || !el.dataset.input) return;
-  const v = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+  const v = classroom.cleanInput(el.value, Number(el.dataset.max) || 5);
   if (el.value !== v) el.value = v;
-  if (el.dataset.act === 'typeRoom') S.roomInput = v;
-  if (el.dataset.act === 'typeChallenge') S.challenge = v;
+  const u = S.classUi;
+  switch (el.dataset.act) {
+    case 'typeRoom': S.roomInput = v; break;
+    case 'typeWatch': S.watchInput = v; break;
+    case 'typeChallenge': S.challenge = v; break;
+    // classroom inputs re-render so the buttons next to them switch on and off
+    case 'typeClassView': u.viewInput = v; u.armDelete = false; render(); break;
+    case 'typeTeacherKey': u.keyInput = v; u.armDelete = false; render(); break;
+    case 'typeClassJoin': u.joinInput = v; u.joinError = ''; render(); break;
+    default: break;
+  }
 });
 stage.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.dataset && e.target.dataset.act === 'typeRoom') A.joinRoom();
+  if (e.key !== 'Enter' || !e.target.dataset) return;
+  const act = e.target.dataset.act;
+  if (act === 'typeRoom') A.joinRoom();
+  else if (act === 'typeWatch') A.watchRoom();
+  else if (act === 'typeClassJoin') A.joinClass();
+  else if (act === 'typeClassView') A.viewClass();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && (S.helpOpen || S.boardOpen)) { A.closeOverlay(); return; }
-  if (e.code === 'Space' && S.screen === 'ops' && S.sim && !S.isGuest() && !(e.target && e.target.matches && e.target.matches('input, button, a'))) {
+  if (e.key === 'Escape' && (S.helpOpen || S.boardOpen || S.classOpen)) { A.closeOverlay(); return; }
+  if (e.code === 'Space' && S.screen === 'ops' && (S.replay || (S.sim && !S.isGuest())) && !(e.target && e.target.matches && e.target.matches('input, button, a'))) {
     e.preventDefault();
     S.speed = S.speed === 0 ? (S.lastSpeed || 1) : (S.lastSpeed = S.speed, 0);
     render();
@@ -741,6 +1015,7 @@ function bootFromHash() {
   toast(`Loaded a shared ${MISSION_BY_ID[cfg.missionId].name} design.`);
 }
 
+showCopyNotice(); // on a copy of the game (not an official host) this shows a dismissible "this is a copy" bar
 fit();
 bootFromHash();
 render();
