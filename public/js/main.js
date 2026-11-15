@@ -13,6 +13,8 @@ import * as card from './card.js';
 import * as replay from './replay.js';
 import * as classroom from './classroom.js';
 import { ORIGIN, showCopyNotice } from './provenance.js';
+import { translateHTML, setLang, getLang, onLangChange } from './i18n.js';
+import { initTutorial, syncTutorial, toggleTutorial } from './tutorial.js';
 
 const stage = document.getElementById('stage');
 const live = document.getElementById('live');
@@ -171,6 +173,7 @@ function render() {
   S.ev = evaluate(S.cfg, phaseFor(S.screen));
   let html = VIEWS[S.screen]();
   if (S.screen === 'title') html += V.commonRegions(S);
+  html = translateHTML(html);
   const active = document.activeElement;
   const focusKey = active && active.dataset && active.dataset.act ? `${active.dataset.act}|${active.dataset.arg || ''}` : null;
   const caret = active && active.dataset && active.dataset.input && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null;
@@ -231,6 +234,7 @@ function render() {
 }
 
 function afterRender(entered) {
+  syncTutorial();
   sync3d();
   if (S.screen === 'ops' && (S.sim || S.snap || S.replay)) startAmbient(); else stopAmbient();
   const dp = stage.querySelector('.dialog p');
@@ -331,6 +335,15 @@ function finishDebrief(sim) {
   if (S.result.stars >= 2) setTimeout(() => sfx.fanfare(), 250); else if (S.result.stars === 0) sfx.fail();
   for (let i = 0; i < S.result.stars; i++) setTimeout(() => sfx.ding(i), 700 + i * 350);
   prepareCard();
+  autoSubmit();
+}
+
+// Ranked runs go onto the leaderboard by themselves when the mission ends (the button stays as a retry).
+function autoSubmit() {
+  setTimeout(() => {
+    if (S.screen !== 'debrief' || S.replay || S.isGuest() || S.isSpectator() || !S.netOk || S.unranked || S.submitted || S.cfg.mode === 'sandbox') return;
+    A.submitScore();
+  }, 900);
 }
 
 // Draw the result card in the background so SAVE and SHARE can use it straight away.
@@ -942,6 +955,8 @@ const A = {
   boardChallenge: () => { S.boardQ.challenge = !S.boardQ.challenge; loadBoard(); },
   openHelp: () => { S.helpOpen = true; render(); },
   closeOverlay: () => { S.helpOpen = false; S.boardOpen = false; S.classOpen = false; S.classUi.created = null; S.classUi.keyInput = ''; S.classUi.armDelete = false; render(); },
+  toggleLang: () => { setLang(getLang() === 'th' ? 'en' : 'th'); },
+  toggleTutorial: () => { toggleTutorial(); render(); },
   toggleMute: () => { S.muted = !S.muted; setMuted(S.muted); store.set('muted', S.muted); render(); },
   reroll: () => { S.callsign = newCallsign(); store.set('callsign', S.callsign); sfx.click(); render(); },
   newChallenge: () => { S.challenge = newCode(); sfx.click(); render(); pushState(); },
@@ -1015,6 +1030,8 @@ function bootFromHash() {
   toast(`Loaded a shared ${MISSION_BY_ID[cfg.missionId].name} design.`);
 }
 
+initTutorial({ getState: () => S, go, toast });
+onLangChange(() => { lastScreen = null; render(); }); // a full redraw restores English on text that was translated before insertion
 showCopyNotice(); // on a copy of the game (not an official host) this shows a dismissible "this is a copy" bar
 fit();
 bootFromHash();

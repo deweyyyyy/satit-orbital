@@ -4,6 +4,8 @@
 import { ROLES, ROLE_ORDER, LEVELS, CML, MISSIONS, INSTRUMENTS, ORBITS, LAUNCHERS, GROUNDS, SLOT_INFO, SLOT_OWNER } from './data.js';
 import { fmtNum, fmtMoney, fmtMass, fmtData, designRevisit, fmtInt } from './engine.js';
 import { originalBadge } from './provenance.js';
+import { langToggleHTML } from './i18n.js';
+import { tutorialToggleHTML } from './tutorial.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -197,7 +199,7 @@ export function titleView(S) {
   </section>
   <span class="abs tiny mut" style="left:80px;bottom:40px;max-width:460px;line-height:1.5">By Team SATIT Orbital for the 2026 NASA Space Apps Challenge. Current rank: CML ${S.rank} · ${esc(rank.name)}. NASA does not endorse this game.<br><span style="color:var(--am)">SI-assisted: code, graphics and sound made with Claude (Anthropic).</span></span>
   <span class="abs tiny mut" style="left:80px;bottom:14px">${originalBadge()}</span>
-  <div data-r="corner" class="abs row" style="right:24px;top:24px">${S.classCode ? `<span class="chip good classchip" style="font-size:13px;padding:5px 12px">Class <b class="disp" style="letter-spacing:.12em">${esc(S.classCode)}</b></span><button class="btn link" ${act('leaveClass')} aria-label="Leave class ${esc(S.classCode)}">LEAVE</button>` : ''}<button class="iconbtn" ${act('toggleMute')} aria-label="${S.muted ? 'Turn sound on' : 'Turn sound off'}">${S.muted ? ICON.mute : ICON.sound}</button></div>`;
+  <div data-r="corner" class="abs row" style="right:24px;top:24px">${S.classCode ? `<span class="chip good classchip" style="font-size:13px;padding:5px 12px">Class <b class="disp" style="letter-spacing:.12em">${esc(S.classCode)}</b></span><button class="btn link" ${act('leaveClass')} aria-label="Leave class ${esc(S.classCode)}">LEAVE</button>` : ''}${langToggleHTML()}${tutorialToggleHTML()}<button class="iconbtn" ${act('toggleMute')} aria-label="${S.muted ? 'Turn sound on' : 'Turn sound off'}">${S.muted ? ICON.mute : ICON.sound}</button></div>`;
 }
 
 // ---------- SELECT ----------
@@ -635,7 +637,8 @@ export function debriefView(S) {
   const decisions = S.finalSim.log.filter((l) => l.choice);
   const small = 'style="min-height:38px;padding:0 9px;gap:6px;font-size:11px;letter-spacing:.06em"';
   const ranked = S.cfg.mode !== 'sandbox' && !S.unranked;
-  const canSubmit = S.netOk && ranked && (!S.submitted || !!S.submitted.error) && !guest;
+  const canSubmit = S.netOk && ranked && !!S.submitted && !!S.submitted.error && !guest; // the button is only the retry: runs are sent automatically
+  const autoPending = S.netOk && ranked && !S.submitted && !guest;
   return `<div class="stars2"></div>
   <header class="hud"><div class="col" style="gap:4px;width:260px"><span class="kicker" style="color:var(--am)">${esc(m.name)} · ${esc(LEVELS[S.cfg.level].name)}</span><h1>DEBRIEF</h1></div><span class="small mut">Seed ${S.seed}${S.challenge ? ` · challenge ${esc(S.challenge)}` : ''}</span>${phaseBlock(4)}</header>
   <section class="panel abs slide-l" style="top:100px;left:24px;bottom:24px;width:400px" aria-labelledby="res-h">
@@ -646,8 +649,8 @@ export function debriefView(S) {
     <div class="col" style="gap:8px">${bars.map((b) => `<div class="scorebar"><span>${b[0]}</span><div class="bar"><i style="width:${Math.max(2, b[1] / maxBar * 100)}%;background:${b[2]}"></i></div><b>${fmtNum(b[1])}</b></div>`).join('')}</div>
     ${S.rankUp ? `<div class="lesson" style="border-color:var(--cy)"><span class="kicker" style="color:var(--cy)">Concept matured!</span><p>You reached CML ${S.rank}: ${esc(CML[S.rank - 1].name)}.</p></div>` : ''}
     <div data-r="submit" class="col" style="margin-top:auto;gap:8px">
-      ${S.submitted ? `<div class="lesson"><span class="kicker">${S.runDaily ? 'Daily leaderboard' : 'Leaderboard'}</span><p>${esc(S.submitted.error ? S.submitted.error : `Ranked #${S.submitted.rank} as ${S.callsign} with ${fmtNum(S.submitted.score)} points.`)}</p></div>` : ''}
-      ${canSubmit && (S.runDaily || S.classCode) ? `<p class="tiny mut" style="margin:0">${S.runDaily ? `Daily challenge ${esc(S.runDaily)}. ` : ''}${S.classCode ? `This score also counts for Class ${esc(S.classCode)}.` : ''}</p>` : ''}
+      ${S.submitted || autoPending ? `<div class="lesson"><span class="kicker">${S.runDaily ? 'Daily leaderboard' : 'Leaderboard'}</span><p>${esc(!S.submitted || S.submitted.pending ? `Sending your score to the leaderboard as ${S.callsign}\u2026` : S.submitted.error ? S.submitted.error : `Ranked #${S.submitted.rank} as ${S.callsign} with ${fmtNum(S.submitted.score)} points.`)}</p></div>` : ''}
+      ${S.netOk && ranked && !guest && (S.runDaily || S.classCode) ? `<p class="tiny mut" style="margin:0">${S.runDaily ? `Daily challenge ${esc(S.runDaily)}. ` : ''}${S.classCode ? `This score also counts for Class ${esc(S.classCode)}.` : ''}</p>` : ''}
       ${canSubmit ? `<button class="btn cyan" ${act('submitScore')}>${ICON.trophy} ${S.submitted && S.submitted.error ? 'TRY AGAIN' : 'SUBMIT'} AS ${esc(S.callsign)}</button>` : ''}
       ${S.unranked && S.cfg.mode !== 'sandbox' ? '<div class="lesson"><span class="kicker">Offline run</span><p>Offline run: not ranked. Ranked runs need the server to start the mission.</p></div>' : !S.netOk ? '<p class="tiny mut" style="margin:0">Leaderboard available on the hosted version.</p>' : ''}
     </div>

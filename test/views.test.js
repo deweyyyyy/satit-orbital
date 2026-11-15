@@ -135,7 +135,8 @@ function debriefState(over = {}) {
 
 test('debrief: submit, unranked, daily, class, card buttons and provenance', () => {
   let html = clean(V.debriefView(debriefState({ seedId: 'ABCDEFGH23456789' })), 'debrief');
-  assert.match(html, /SUBMIT AS Swift-Falcon-07/);
+  assert.match(html, /Sending your score to the leaderboard as Swift-Falcon-07/, 'ranked runs are sent automatically');
+  assert.ok(!/data-act="submitScore"/.test(html), 'no manual button until a send fails');
   assert.match(html, /SAVE RESULT CARD/);
   assert.ok(!/SHARE RESULT/.test(html));
   assert.match(html, /Originally by SATIT Orbital/);

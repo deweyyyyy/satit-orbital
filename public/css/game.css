@@ -320,3 +320,6 @@ table.board td .btn { white-space: nowrap; }
   #print-report th { background: #e8e8e8; }
   #print-report .note { font-size: 9pt; margin-top: 12pt; }
 }
+
+/* Legibility of the original-project line over the 3D Earth */
+.origin-badge { text-shadow: 0 1px 6px #000, 0 0 3px #000; }
