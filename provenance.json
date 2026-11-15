@@ -1,0 +1,29 @@
+{
+  "project": "SATIT Orbital",
+  "repo": "https://github.com/deweyyyyy/satit-orbital",
+  "ref": "v1.0-submitted",
+  "commit": "5bca77b4a432b1b576804b3dbf787503714ad775",
+  "committed": "2026-11-14T22:42:34+07:00",
+  "submittedToSpaceApps": "2026-11-14T15:46:00Z",
+  "note": "SHA-256 of every shipped file in the version submitted to NASA Space Apps 2026. Run `npm run verify` in any copy to compare it with this list.",
+  "fileCount": 17,
+  "files": {
+    "migrations/0001_init.sql": "1ae2a636fe4220d4b64c46a9e310f6a401b700818ffb44d4e5042c1336b9659c",
+    "package.json": "5637a6e2e4218cebcf590451822fe870ba136cdfa6a7eb07c89e7852770e555b",
+    "public/css/game.css": "0fe53fe602b7631be6274853c9a4283a23696d0ad6d96fc7f85c30b2d32c4cff",
+    "public/index.html": "842d9738fb27ce000bb1bdea553d3cc35f6c9e97bc71ac86a0ba8faa0bfc51c4",
+    "public/js/data.js": "a0a67d8c7c38f98715cfba0241c190170a18cf8a1d6355b2e8fa2e337db7848b",
+    "public/js/engine.js": "404e2cf8dec4ffb5706185be95f2b3c3e54738bcf86b4672836778239d8b432b",
+    "public/js/fx.js": "9c2975abb4bbee7ab1fb5ff377248b784593b80dc8a555d1e3f8166e4ad3bf04",
+    "public/js/main.js": "21116129a67e6ab0b8341e452d8b3815b77b9410c917507459c4230b3ffa19b7",
+    "public/js/net.js": "6921a2cf808a7af7254e3b010f16589d412cc6bf62865b5f62339ace07a72f5e",
+    "public/js/scene3d.js": "85f592761f43f3f11f3927fe95c44932fc1a9a5a81d6594d31a003597465e4a3",
+    "public/js/views.js": "5e39b2dfd0b8d090fc44bea9b94230e1e9f2e365a974f841b98f304d84a30c0f",
+    "public/vendor/three.LICENSE.txt": "4c40a1ef62450b857c3b2aaf294936304cd552d965fbcd9d32d4c5bcf4ba4454",
+    "public/vendor/three.module.min.js": "08fd7545d13d2c7fb65ab691530a802dafefd638596501854f267d0fb13c39e7",
+    "src/worker.js": "6fadbf582f8872e3178cfd22ac32913de33879fdb3097293acd10e1ad63ebeab",
+    "test/api-smoke.mjs": "5635f62cbd2f0e2cd12a73989d8ebc7d4a0435a50742f3e895177ce7ff756fe6",
+    "test/engine.test.js": "2fe3e782f7c60c51e43dc65208655b13d851686179467b6f98df302b0b91acd8",
+    "wrangler.jsonc": "b074eeea36b0106fdef9be5b60f859c6017b3bc54ed4c8e026fc1ea22310376d"
+  }
+}

@@ -13,7 +13,9 @@
     "deploy": "wrangler deploy",
     "check": "wrangler deploy --dry-run --outdir=dist",
     "test:smoke": "node test/api-smoke.mjs",
-    "vendor:three": "cp node_modules/three/build/three.module.min.js public/vendor/ && cp node_modules/three/LICENSE public/vendor/three.LICENSE.txt"
+    "vendor:three": "cp node_modules/three/build/three.module.min.js public/vendor/ && cp node_modules/three/LICENSE public/vendor/three.LICENSE.txt",
+    "provenance": "node scripts/provenance.mjs generate v1.0-submitted",
+    "verify": "node scripts/provenance.mjs verify"
   },
   "devDependencies": {
     "three": "0.170.0",
